@@ -2,8 +2,8 @@
 
 | Document field | Value |
 | --- | --- |
-| Status | Design draft; implementation has not started |
-| Version | 0.1 |
+| Status | Phase 0 capture/replay verified on 22 real transactions; longer M0 source/hardware measurements remain open |
+| Version | 0.4 |
 | Created / last updated | 2026-10-08 |
 | Intended builder | One developer working part-time |
 | Primary environment | Local machine; containers before Kubernetes |
@@ -12,7 +12,7 @@
 | Origin | The supplied Bitcoin anomaly pipeline discussion and system-design draft |
 | Role of this document | Canonical reference for the idea, design, scope, implementation sequence, and progress |
 
-This document describes what we intend to build. Targets, resource allocations, and schedules are planning assumptions until a measurement is attached. The proposed defaults below make the project actionable without treating every decision in the original discussion as settled.
+This document describes the full intended project. The first local implementation is documented in [Phase 0](PHASE0.md); most later components remain planned. Targets, resource allocations, and schedules are planning assumptions until a measurement is attached. The proposed defaults below make the project actionable without treating every decision in the original discussion as settled.
 
 Quick navigation:
 
@@ -857,7 +857,7 @@ Start CI with formatting, lint/type checks, unit/contract tests, and a bounded i
 
 ## 18. Proposed repository organization
 
-This tree is a target structure. At document creation, only the README and this plan exist.
+This tree is a target structure for later phases. The current small implementation uses flat modules in `src/blockpulse/` for capture, normalization, processing, and shared features, plus `tests/`. The initial learning script remains in `examples/`, with its walkthrough in `docs/learning/`. Infrastructure and ML packages below are still planned.
 
 ```text
 BlockPulse/
@@ -942,7 +942,7 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 | Milestone | Status | Evidence / next action |
 | --- | --- | --- |
 | Project reference | Drafted | This document and README |
-| M0: source and hardware validation | Not started | Record host limits and build the small source spike |
+| M0: source and hardware validation | In progress | [Regional endpoint experiment](experiments/2026-10-08-source-connectivity.md) captured and replayed 22 real transactions successfully; longer provider and hardware measurements remain open |
 | M1: ingest/archive/replay | Not started | Depends on M0 |
 | M2: features/baseline/API | Not started | Depends on M1 |
 | M3: ML/evaluation | Not started | Depends on M2 |
@@ -951,7 +951,7 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 | E2: Kubernetes/networking | Deferred | Optional; gate on completed local core |
 | E3: AWS experiment | Deferred | Optional; gate on a current costed plan |
 
-**Next concrete task:** run M0. Capture source examples, record hardware constraints, and write a short feasibility report before building the full service stack.
+**Next concrete task:** extend the successful regional-endpoint capture to ten minutes, inspect lifecycle events and payload sizes, and record the host resource budget. The first real capture produced 22 complete feature rows and identical offline replay output.
 
 ### 21.2 Returning after a break
 
@@ -981,5 +981,8 @@ Resources still running, if any:
 | Date | Version | Change |
 | --- | --- | --- |
 | 2026-10-08 | 0.1 | Consolidated the rough discussion into one reference; defined a local core and optional extensions; clarified coverage, replay, evaluation, resource, and cost assumptions |
+| 2026-10-08 | 0.2 | Started M0 with a small standard-library transaction-path example and guided walkthrough; core services remain unimplemented |
+| 2026-10-08 | 0.3 | Added bounded WebSocket capture, original-message JSONL, normalized lifecycle events, shared transaction features, deterministic JSONL/CSV replay, tests, and Phase 0 run instructions; public-source validation remains open |
+| 2026-10-08 | 0.4 | Diagnosed TCP timeouts on the default route; verified a regional mempool.space endpoint with 22 real transactions, complete feature extraction, and byte-identical replay; recorded findings and the working command |
 
 The supplied draft remains the origin of the idea. This document supersedes its stronger unverified claims about lossless public ingestion, guaranteed cloud caps, fixed entity recovery times, and real-world detection accuracy. Replace estimates with linked measurements as the project develops.

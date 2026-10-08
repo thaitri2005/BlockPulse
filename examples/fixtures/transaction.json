@@ -1,0 +1,22 @@
+{
+  "_example_note": "Synthetic teaching fixture. Not a real, serialized, or broadcast Bitcoin transaction. Weight is supplied to demonstrate rounding.",
+  "txid": "synthetic-learning-example",
+  "version": 2,
+  "locktime": 0,
+  "weight": 801,
+  "fee": 603,
+  "vin": [
+    {
+      "txid": "synthetic-previous-transaction",
+      "vout": 0,
+      "prevout": {
+        "value": 100603
+      }
+    }
+  ],
+  "vout": [
+    { "value": 60000 },
+    { "value": 40000 }
+  ],
+  "status": { "confirmed": false }
+}

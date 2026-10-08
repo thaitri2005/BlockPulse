@@ -1,0 +1,16 @@
+# Downloaded learning data and generated results
+/data/
+
+# Local Python environment and caches
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+/build/
+/dist/
+
+# Local secrets
+.env
+.env.*
+!.env.example
