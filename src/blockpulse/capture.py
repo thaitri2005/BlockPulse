@@ -46,7 +46,7 @@ class CaptureConfig:
             raise ValueError("max_reconnects must be a nonnegative integer")
 
 
-async def capture(config: CaptureConfig, output: Path, *, connector=connect) -> dict:
+async def capture(config: CaptureConfig, output: Path, *, connector=connect, on_message=None) -> dict:
     """Create a new capture directory. Never append to or overwrite an old run."""
     output.mkdir(parents=True, exist_ok=False)
     run_id = uuid.uuid4().hex
@@ -137,6 +137,9 @@ async def capture(config: CaptureConfig, output: Path, *, connector=connect) -> 
                                     break
                                 summary["messages_saved"] += 1
                                 summary["payload_bytes_saved"] += payload_size
+                                # The raw envelope is flushed locally before an optional stream sink sees it.
+                                if on_message is not None:
+                                    on_message(record)
                                 parsed = parse_record(record)
                                 summary["messages_with_parse_issues"] += bool(parsed.issues)
                                 summary["unrecognized_messages"] += not parsed.recognized

@@ -2,8 +2,8 @@
 
 | Document field | Value |
 | --- | --- |
-| Status | Local Phase 0 and first Phase 1 baseline complete; labeled detection evaluation remains future work |
-| Version | 0.7 |
+| Status | Local Phase 0 and first Phase 1 baseline complete; M1 ingestion, bounded enrichment, JSONL/Parquet archival, and replay complete |
+| Version | 1.0 |
 | Created / last updated | 2026-10-09 |
 | Intended builder | One developer working part-time |
 | Primary environment | Local machine; containers before Kubernetes |
@@ -943,7 +943,7 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 | --- | --- | --- |
 | Project reference | Drafted | This document and README |
 | M0: source and hardware validation | Complete for bounded local prototype | [Phase 0/1 validation](experiments/2026-10-09-phase0-phase1-validation.md): ten-minute capture, all four lifecycle types, replay, host snapshot, field completeness, payload distribution, and gaps recorded |
-| M1: ingest/archive/replay | Not started | Depends on M0 |
+| M1: ingest/archive/replay | Complete for the local learning pipeline | Live capture-to-Kafka preserves raw JSONL; saved-data replay, bounded enrichment, JSONL archive, and Zstandard Parquet archive run on the three-topic Kafka profile. A 402-message run yielded 6,983 events, 2,732 matching features, zero enrichment requests/errors, and zero final lag; restart behavior verified; 62 tests passed and one optional test skipped. Public WebSocket access was denied by the agent runtime, so source connectivity still needs a user-shell smoke test. See [M1 guide](M1_KAFKA.md). |
 | Local Phase 1 structural baseline | Complete as an explainable prototype | `transaction-v2` features, three rules, eight synthetic cases, threshold sweep, and a checked 2,732-row observation. No independent labels; detection quality is unknown. See [Phase 1](PHASE1.md). |
 | M2: features/baseline/API | In progress | Shared features and local baseline are done; queryable persistence, API/dashboard, and labeled evaluation remain open |
 | M3: ML/evaluation | Not started | Depends on M2 |
@@ -952,7 +952,7 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 | E2: Kubernetes/networking | Deferred | Optional; gate on completed local core |
 | E3: AWS experiment | Deferred | Optional; gate on a current costed plan |
 
-**Next concrete task:** begin M1, starting with a small local Compose profile and a decision on which captured records need Kafka versus direct archival. Keep raw replay as the correctness reference. M0 and the first local Phase 1 baseline are complete; meaningful detection-quality claims still require independent labels and a held-out evaluation.
+**Next concrete task:** continue M2 by adding queryable result persistence and a small read-only API, then expose the existing baseline results. The M1 local streaming pipeline is complete and verified against the 402-message capture; public WebSocket access from the agent runtime was denied, so repeat the live source smoke test from the user’s PowerShell session when convenient. M0, Phase 1, and M1 are complete; meaningful detection-quality claims still require independent labels and a held-out evaluation.
 
 ### 21.2 Returning after a break
 
@@ -990,5 +990,8 @@ Resources still running, if any:
 | 2026-10-08 | 0.5 | Added transaction-v2 structural features and a deterministic explainable offline screen with fan-out, fan-in, and repeated-output-value signals; documented thresholds, output artifacts, version migration, and evaluation limits |
 | 2026-10-09 | 0.6 | Added controlled rule-mechanics cases, benign counterexamples, and one-at-a-time fan-in/fan-out threshold sweeps; documented the limits of these synthetic checks |
 | 2026-10-09 | 0.7 | Completed bounded Phase 0 source/hardware validation; fixed provider replacement normalization; verified deterministic replay and checked Phase 1 signals on 2,732 real observations; added the manual-review rubric and evidence report |
+| 2026-10-09 | 0.8 | Started M1 with a pinned local Kafka broker profile, capture replay producer, restart-safe JSONL archive consumer, and broker-independent tests |
+| 2026-10-09 | 0.9 | Verified the 402-message raw Kafka round trip, exact processed feature/event records, and repeat-consumer behavior |
+| 2026-10-09 | 1.0 | Completed capture-to-Kafka, bounded enrichment, error topic, Zstandard Parquet archival, offset-safe restart behavior, throughput/lag summaries, and the full M1 local integration (62 passed, 1 skipped) |
 
 The supplied draft remains the origin of the idea. This document supersedes its stronger unverified claims about lossless public ingestion, guaranteed cloud caps, fixed entity recovery times, and real-world detection accuracy. Replace estimates with linked measurements as the project develops.

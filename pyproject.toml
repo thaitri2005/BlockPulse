@@ -12,6 +12,8 @@ dependencies = ["websockets==15.0.1"]
 
 [project.optional-dependencies]
 dev = ["pytest==8.4.2"]
+kafka = ["confluent-kafka==2.16.0"]
+m1 = ["confluent-kafka==2.16.0", "pyarrow==25.0.0"]
 
 [project.scripts]
 blockpulse = "blockpulse.cli:main"

@@ -4,7 +4,7 @@ BlockPulse is a Bitcoin transaction anomaly pipeline in development. It captures
 
 The project is a practical way to learn streaming data engineering, MLOps, reliability, networking, and deployment while keeping hardware requirements and cloud spending manageable. An anomaly score describes unusual behavior; it is not a probability of fraud or evidence of wrongdoing.
 
-**Current status:** Local Phase 0 capture/replay and the first Phase 1 structural baseline are implemented and validated on a ten-minute, 2,732-transaction observation plus controlled synthetic cases. The rules are not calibrated and make no claim about wrongdoing. See the [validation report](docs/experiments/2026-10-09-phase0-phase1-validation.md). The default hostname's route timed out on this machine; a tested regional endpoint worked with `--url`.
+**Current status:** Local Phase 0, the Phase 1 structural baseline, and M1 ingestion/archive/replay are complete. M1 adds live capture-to-Kafka while preserving JSONL, bounded missing-field enrichment, a raw JSONL archive, and a restart-safe Parquet archive. A 402-message saved run reproduced the same 2,732 feature rows and 6,983 event rows as direct processing. The next milestone is M2 queryable results and an API/dashboard. The rules are not calibrated and make no claim about wrongdoing. See the [validation report](docs/experiments/2026-10-09-phase0-phase1-validation.md) and [M1 Kafka results](docs/M1_KAFKA.md).
 
 ## Run Phase 0
 
@@ -42,6 +42,8 @@ See [Phase 0 commands and behavior](docs/PHASE0.md) for limits, file formats, te
 See [Phase 1 structural screening](docs/PHASE1.md) for the rules, interpretation, output files, and how to run it on recorded data.
 
 See [Current architecture and data flow](docs/ARCHITECTURE_CURRENT.md) for the detailed explanation of technologies, modules, schemas, artifacts, and what is or is not implemented at this stage.
+
+The [M1 Kafka guide](docs/M1_KAFKA.md) documents the complete local pipeline, its run commands, and measured verification.
 
 ## Project reference
 

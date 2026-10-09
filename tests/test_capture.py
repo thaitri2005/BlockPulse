@@ -97,3 +97,21 @@ def test_cancellation_finalizes_capture_summary(tmp_path):
 def test_invalid_configuration_is_rejected(kwargs):
     with pytest.raises(ValueError):
         CaptureConfig(**kwargs)
+
+
+def test_optional_sink_receives_only_durably_saved_envelopes(tmp_path):
+    connection = ScriptedConnection([json.dumps({"mempool-transactions": {"sequence": 1, "added": []}})])
+    seen = []
+    output = tmp_path / "capture-sink"
+
+    def sink(row):
+        saved = json.loads((output / "messages.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+        assert saved == row
+        seen.append(row["message_id"])
+
+    summary = asyncio.run(capture(
+        CaptureConfig(duration=1, max_messages=1), output,
+        connector=lambda *a, **kw: connection, on_message=sink,
+    ))
+    assert summary["messages_saved"] == 1
+    assert seen == ["%s:1" % summary["run_id"]]
