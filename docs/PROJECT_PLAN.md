@@ -2,9 +2,9 @@
 
 | Document field | Value |
 | --- | --- |
-| Status | Phase 0 capture/replay verified on 22 real transactions; longer M0 source/hardware measurements remain open |
-| Version | 0.4 |
-| Created / last updated | 2026-10-08 |
+| Status | Local Phase 0 and first Phase 1 baseline complete; labeled detection evaluation remains future work |
+| Version | 0.7 |
+| Created / last updated | 2026-10-09 |
 | Intended builder | One developer working part-time |
 | Primary environment | Local machine; containers before Kubernetes |
 | Hardware assumption | 16 GB RAM, 4 or more CPU cores, SSD; actual capacity remains to be recorded |
@@ -942,16 +942,17 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 | Milestone | Status | Evidence / next action |
 | --- | --- | --- |
 | Project reference | Drafted | This document and README |
-| M0: source and hardware validation | In progress | [Regional endpoint experiment](experiments/2026-10-08-source-connectivity.md) captured and replayed 22 real transactions successfully; longer provider and hardware measurements remain open |
+| M0: source and hardware validation | Complete for bounded local prototype | [Phase 0/1 validation](experiments/2026-10-09-phase0-phase1-validation.md): ten-minute capture, all four lifecycle types, replay, host snapshot, field completeness, payload distribution, and gaps recorded |
 | M1: ingest/archive/replay | Not started | Depends on M0 |
-| M2: features/baseline/API | Not started | Depends on M1 |
+| Local Phase 1 structural baseline | Complete as an explainable prototype | `transaction-v2` features, three rules, eight synthetic cases, threshold sweep, and a checked 2,732-row observation. No independent labels; detection quality is unknown. See [Phase 1](PHASE1.md). |
+| M2: features/baseline/API | In progress | Shared features and local baseline are done; queryable persistence, API/dashboard, and labeled evaluation remain open |
 | M3: ML/evaluation | Not started | Depends on M2 |
 | M4: reliable local release | Not started | Depends on M3 |
 | E1: entity analysis | Deferred | Optional; gate on data coverage and memory |
 | E2: Kubernetes/networking | Deferred | Optional; gate on completed local core |
 | E3: AWS experiment | Deferred | Optional; gate on a current costed plan |
 
-**Next concrete task:** extend the successful regional-endpoint capture to ten minutes, inspect lifecycle events and payload sizes, and record the host resource budget. The first real capture produced 22 complete feature rows and identical offline replay output.
+**Next concrete task:** begin M1, starting with a small local Compose profile and a decision on which captured records need Kafka versus direct archival. Keep raw replay as the correctness reference. M0 and the first local Phase 1 baseline are complete; meaningful detection-quality claims still require independent labels and a held-out evaluation.
 
 ### 21.2 Returning after a break
 
@@ -962,6 +963,8 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 5. Run the existing offline demo/tests once those exist.
 6. Choose the smallest next task that advances the current milestone.
 7. Update the tracker, measured assumptions, and next task before stopping.
+
+For a detailed description of the working system rather than the future target, read [Current architecture and data flow](ARCHITECTURE_CURRENT.md). It maps the actual Python modules and CLI stages to their inputs, outputs, technologies, and limitations.
 
 Use this short handoff format at meaningful stopping points:
 
@@ -984,5 +987,8 @@ Resources still running, if any:
 | 2026-10-08 | 0.2 | Started M0 with a small standard-library transaction-path example and guided walkthrough; core services remain unimplemented |
 | 2026-10-08 | 0.3 | Added bounded WebSocket capture, original-message JSONL, normalized lifecycle events, shared transaction features, deterministic JSONL/CSV replay, tests, and Phase 0 run instructions; public-source validation remains open |
 | 2026-10-08 | 0.4 | Diagnosed TCP timeouts on the default route; verified a regional mempool.space endpoint with 22 real transactions, complete feature extraction, and byte-identical replay; recorded findings and the working command |
+| 2026-10-08 | 0.5 | Added transaction-v2 structural features and a deterministic explainable offline screen with fan-out, fan-in, and repeated-output-value signals; documented thresholds, output artifacts, version migration, and evaluation limits |
+| 2026-10-09 | 0.6 | Added controlled rule-mechanics cases, benign counterexamples, and one-at-a-time fan-in/fan-out threshold sweeps; documented the limits of these synthetic checks |
+| 2026-10-09 | 0.7 | Completed bounded Phase 0 source/hardware validation; fixed provider replacement normalization; verified deterministic replay and checked Phase 1 signals on 2,732 real observations; added the manual-review rubric and evidence report |
 
 The supplied draft remains the origin of the idea. This document supersedes its stronger unverified claims about lossless public ingestion, guaranteed cloud caps, fixed entity recovery times, and real-world detection accuracy. Replace estimates with linked measurements as the project develops.

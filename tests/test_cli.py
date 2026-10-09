@@ -1,6 +1,7 @@
 import json
 
 from blockpulse.cli import main
+from blockpulse.features import FEATURE_SET_VERSION, extract_features
 
 
 def test_process_command_reports_output_and_refuses_overwrite(tmp_path, transaction, record_factory, capsys):
@@ -30,3 +31,27 @@ def test_missing_source_and_invalid_capture_settings_do_not_create_output(tmp_pa
     assert not output.exists()
     assert main(["capture", "--duration", "-1", "--output", str(output)]) == 1
     assert not output.exists()
+
+
+def test_detect_command_screens_feature_file(tmp_path, transaction, capsys):
+    source = tmp_path / "features.jsonl"
+    row = {
+        "schema_version": 1, "txid": "a" * 64, "event_id": "event-1",
+        "feature_set_version": FEATURE_SET_VERSION, "source_mode": "synthetic",
+        **extract_features(transaction), "n_in": 168,
+    }
+    source.write_text(json.dumps(row) + "\n", encoding="utf-8")
+    output = tmp_path / "screened"
+    assert main(["detect", str(source), "--output", str(output)]) == 0
+    assert json.loads((output / "summary.json").read_text())["flagged_rows"] == 1
+    assert "Saved to:" in capsys.readouterr().out
+
+
+def test_lab_command_writes_scenario_and_sweep_results(tmp_path, capsys):
+    output = tmp_path / "lab"
+    assert main(["lab", "--output", str(output)]) == 0
+    summary = json.loads((output / "summary.json").read_text())
+    assert summary["scenario_count"] == 8
+    assert summary["threshold_sweep_rows"] == 48
+    assert (output / "threshold_sweep.csv").is_file()
+    assert "Saved to:" in capsys.readouterr().out

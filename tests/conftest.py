@@ -8,7 +8,7 @@ import pytest
 def transaction():
     return {
         "txid": "a" * 64,
-        "vin": [{"txid": "b" * 64, "vout": 0, "prevout": {"value": 100603}}],
+        "vin": [{"txid": "b" * 64, "vout": 0, "prevout": {"value": 100603}, "sequence": 4294967293}],
         "vout": [{"value": 60000}, {"value": 40000}],
         "weight": 801,
         "fee": 603,

@@ -81,11 +81,23 @@ def parse_record(record: dict) -> ParsedMessage:
                 parsed.issues.append(f"{channel}.{kind} is not a list")
                 continue
             for index, entry in enumerate(entries):
-                candidate = entry.get("txid") if isinstance(entry, dict) else entry
+                replacement_txid = None
+                if kind == "replaced" and isinstance(entry, dict) and "replaced" in entry:
+                    candidate = entry.get("replaced")
+                    replacement = entry.get("by")
+                    candidate_replacement = replacement.get("txid") if isinstance(replacement, dict) else None
+                    if isinstance(candidate_replacement, str) and TXID.fullmatch(candidate_replacement):
+                        replacement_txid = candidate_replacement.lower()
+                    else:
+                        parsed.issues.append(
+                            f"{channel}.{kind}[{index}] has no supported replacement txid; payload retained"
+                        )
+                else:
+                    candidate = entry.get("txid") if isinstance(entry, dict) else entry
                 txid = candidate.lower() if isinstance(candidate, str) and TXID.fullmatch(candidate) else None
                 if txid is None:
                     parsed.issues.append(f"{channel}.{kind}[{index}] has no supported txid; payload retained")
-                parsed.events.append({
+                event = {
                     "schema_version": 1,
                     "event_id": stable_id(record["message_id"], channel, kind, index),
                     "run_id": record["run_id"],
@@ -99,5 +111,8 @@ def parse_record(record: dict) -> ParsedMessage:
                     "event_time_basis": "received_at",
                     "received_at": record["received_at"],
                     "payload": entry,
-                })
+                }
+                if kind == "replaced" and isinstance(entry, dict) and "replaced" in entry:
+                    event["replacement_txid"] = replacement_txid
+                parsed.events.append(event)
     return parsed

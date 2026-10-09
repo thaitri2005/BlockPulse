@@ -39,3 +39,22 @@ def test_ids_only_and_bad_envelope(record_factory):
     assert parse_record(record_factory({}, schema_version=99)).issues
     assert parse_record(record_factory({}, received_at="2026-10-08")).issues
     assert parse_record([1, 2]).issues
+
+
+def test_replacement_mapping_normalizes_old_and_new_ids(record_factory):
+    entry = {"replaced": "a" * 64, "by": {"txid": "b" * 64, "vin": [], "vout": []}}
+    parsed = parse_record(record_factory({"mempool-transactions": {"replaced": [entry]}}))
+    assert parsed.issues == []
+    event = parsed.events[0]
+    assert event["event_type"] == "replaced"
+    assert event["txid"] == "a" * 64
+    assert event["replacement_txid"] == "b" * 64
+    assert event["payload"] == entry
+
+
+def test_replacement_mapping_without_new_txid_is_diagnosed(record_factory):
+    entry = {"replaced": "a" * 64, "by": {"fee": 100}}
+    parsed = parse_record(record_factory({"mempool-transactions": {"replaced": [entry]}}))
+    assert parsed.events[0]["txid"] == "a" * 64
+    assert parsed.events[0]["replacement_txid"] is None
+    assert any("replacement txid" in issue for issue in parsed.issues)

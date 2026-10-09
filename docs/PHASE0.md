@@ -85,6 +85,8 @@ Raw message persistence happens before parsing. Invalid JSON and unexpected payl
 
 The parser recognizes the `mempool-transactions` and `mempool-txids` envelopes and their `added`, `removed`, `mined`, and `replaced` arrays. It accepts IDs or objects containing a transaction ID and retains unsupported entry shapes with a diagnostic. The published provider examples are the initial contract reference, not a guarantee about any future deployment. [Mempool API examples](https://github.com/mempool/mempool/blob/master/frontend/src/app/docs/api-docs/api-docs-data.ts).
 
+For the observed replacement object shape, the normalized `replaced` event carries the old transaction in `txid` and the new transaction in `replacement_txid`, while preserving the original replacement payload.
+
 Normalization uses the recorded receipt time as event time. Raw source fields such as `firstSeen` remain in the payload and do not silently change that definition.
 
 The processed directory contains:
@@ -101,7 +103,7 @@ Duplicate capture records with the same message identity are ignored after their
 
 All four lifecycle event types are retained, but only `added` transactions feed feature extraction. Confirmations or removals do not erase or recompute previously observed structural features. There is no inferred replacement link when the source does not provide a recognized one.
 
-The shared `transaction-v1` feature set contains input count, output count, summed output value, fee, virtual size, and fee rate. Amounts are integer satoshis. Missing or invalid required values are errors rather than zero-valued features. Coinbase records are rejected. The package and original one-transaction exercise call the same implementation.
+The original `transaction-v1` feature set contains input count, output count, summed output value, fee, virtual size, and fee rate. Current processing emits `transaction-v2`, which adds equal-positive-output count, round-amount fraction, and an RBF-sequence observation (which can be unknown when data is missing). Amounts are integer satoshis. Missing or invalid required values are errors rather than zero-valued features. Coinbase records are rejected. The package and original one-transaction exercise call the same implementation. See [Phase 1](PHASE1.md) for the added fields and screening behavior.
 
 Processing a fixed input with unchanged code produces identical event, feature, error, and summary files when the input path is unchanged. The summary includes the source's absolute path, so copying the input elsewhere changes that provenance field. Processing targets short local captures; its deduplication sets grow with unique message/transaction counts. Larger archives need a separate storage design.
 
@@ -135,10 +137,11 @@ The synthetic demo intentionally includes duplicate additions, all four lifecycl
 
 Verification on 2026-10-08:
 
-- All 30 tests passed with the socket test enabled, including a real loopback WebSocket round trip, interrupted-capture finalization, command-line exit behavior, and protection against overwriting prior outputs.
+- All 30 tests passed with the socket test enabled at the Phase 0 boundary, including a real loopback WebSocket round trip, interrupted-capture finalization, command-line exit behavior, and protection against overwriting prior outputs.
 - Processing the synthetic capture twice produced identical output files.
 - Python syntax, documentation links, and Git whitespace checks passed.
 - Initial live runs against the default hostname timed out and saved zero messages with explicit failure summaries. Follow-up diagnostics found TCP timeouts on three DNS-returned servers, before TLS or WebSocket negotiation.
 - A regional endpoint, `node203.sv1.mempool.space`, connected with normal certificate verification and delivered five messages containing 22 added transactions in a 6.968-second run. All 22 produced features with no missing inputs or parse issues. Processing the real capture twice produced byte-identical output files.
+- The follow-up ten-minute capture and corrected replacement schema are detailed in the [validation report](experiments/2026-10-09-phase0-phase1-validation.md). After the parser fix, two offline replays were byte-identical and all 44 tests passed with the loopback socket test enabled.
 
-The first real-data path is now verified. Remaining M0 work includes a longer capture, observations of other lifecycle events, sustainable volume/size measurements, and the host resource budget. REST enrichment and Parquet storage are later additions if the captured evidence justifies them.
+The current Phase 0 validation, including a ten-minute bounded capture, lifecycle observations, host snapshot, size distribution, and deterministic replay, is recorded in the [2026-10-09 validation report](experiments/2026-10-09-phase0-phase1-validation.md). The source still has reconnect gaps, and the measured active-burst storage rate is not a long-run forecast. REST enrichment and Parquet storage remain later additions if evidence justifies them.

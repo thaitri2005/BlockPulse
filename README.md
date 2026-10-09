@@ -1,10 +1,10 @@
 # BlockPulse
 
-BlockPulse is a Bitcoin transaction anomaly pipeline in development. Its first working stage captures mempool observations, saves original messages, and turns recorded transactions into reproducible features. Later stages will add anomaly screening, an API, and Grafana.
+BlockPulse is a Bitcoin transaction anomaly pipeline in development. It captures mempool observations, saves original messages, turns recorded transactions into reproducible features, and applies a first explainable structural screen offline. Later stages will add stronger baselines, an API, and Grafana.
 
 The project is a practical way to learn streaming data engineering, MLOps, reliability, networking, and deployment while keeping hardware requirements and cloud spending manageable. An anomaly score describes unusual behavior; it is not a probability of fraud or evidence of wrongdoing.
 
-**Current status:** Phase 0 / M0 data path implemented and verified with real data: 22 transactions captured, processed, and replayed identically. The default hostname's route times out on this machine; a tested regional mempool.space endpoint works with `--url`.
+**Current status:** Local Phase 0 capture/replay and the first Phase 1 structural baseline are implemented and validated on a ten-minute, 2,732-transaction observation plus controlled synthetic cases. The rules are not calibrated and make no claim about wrongdoing. See the [validation report](docs/experiments/2026-10-09-phase0-phase1-validation.md). The default hostname's route timed out on this machine; a tested regional endpoint worked with `--url`.
 
 ## Run Phase 0
 
@@ -38,6 +38,10 @@ Each command prints its output directory and summary. Processing writes normaliz
 The command above uses the endpoint verified from this machine on 2026-10-08. The application's default remains `wss://mempool.space/api/v1/ws`. Regional-node availability can change; see the [connectivity findings](docs/experiments/2026-10-08-source-connectivity.md) for the diagnosis and test results.
 
 See [Phase 0 commands and behavior](docs/PHASE0.md) for limits, file formats, test commands, and verification results.
+
+See [Phase 1 structural screening](docs/PHASE1.md) for the rules, interpretation, output files, and how to run it on recorded data.
+
+See [Current architecture and data flow](docs/ARCHITECTURE_CURRENT.md) for the detailed explanation of technologies, modules, schemas, artifacts, and what is or is not implemented at this stage.
 
 ## Project reference
 
