@@ -96,6 +96,9 @@ def main(argv: list[str] | None = None) -> int:
     load_results.add_argument("--run-id", help="Identity of this result set; default is the directory name")
     load_events_parser = commands.add_parser("load-events", help="Load lifecycle events into Postgres and refresh transaction status (safe to repeat)")
     load_events_parser.add_argument("source", type=Path, help="A `process` output directory or its events.jsonl")
+    serve = commands.add_parser("serve", help="Run the read-only API (localhost only unless --host is changed)")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", type=int, default=8000)
     args = parser.parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
@@ -187,6 +190,13 @@ def main(argv: list[str] | None = None) -> int:
                     return load_events(connection, args.source)
             summary = _kafka_call("Lifecycle load", run_load_events)
             code = 0 if summary["invalid"] == 0 else 4
+        elif args.command == "serve":
+            try:
+                import uvicorn
+            except ImportError as error:
+                raise RuntimeError('uvicorn is not installed; run: pip install -e ".[m2]"') from error
+            uvicorn.run("blockpulse.api:create_default_app", factory=True, host=args.host, port=args.port)
+            return 0
         elif args.command == "kafka-init":
             output = None
             summary = _kafka_call("Kafka topic initialization", lambda: create_m1_topics(args.bootstrap_servers))
