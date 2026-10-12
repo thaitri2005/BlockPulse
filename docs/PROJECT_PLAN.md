@@ -2,17 +2,19 @@
 
 | Document field | Value |
 | --- | --- |
-| Status | Local Phase 0 and first Phase 1 baseline complete; M1 ingestion, bounded enrichment, JSONL/Parquet archival, and replay complete |
-| Version | 1.0 |
-| Created / last updated | 2026-10-09 |
+| Status | M0 and M1 complete; M2 in progress (rule baseline done; persistence, API, dashboard open) |
+| Version | 1.1 |
+| Created / last updated | 2026-10-08 / 2026-10-12 |
 | Intended builder | One developer working part-time |
 | Primary environment | Local machine; containers before Kubernetes |
-| Hardware assumption | 16 GB RAM, 4 or more CPU cores, SSD; actual capacity remains to be recorded |
+| Hardware (measured 2026-10-09) | Intel i5-1340P (12 cores / 16 threads), 15.6 GiB RAM, ~66 GiB free on D:; Windows 11 + Docker Desktop |
 | Cloud posture | Optional, temporary experiments; no always-on cloud environment |
 | Origin | The supplied Bitcoin anomaly pipeline discussion and system-design draft |
 | Role of this document | Canonical reference for the idea, design, scope, implementation sequence, and progress |
 
-This document describes the full intended project. The first local implementation is documented in [Phase 0](PHASE0.md); most later components remain planned. Targets, resource allocations, and schedules are planning assumptions until a measurement is attached. The proposed defaults below make the project actionable without treating every decision in the original discussion as settled.
+This document describes the full intended project. What is actually built is described in [Current architecture](ARCHITECTURE_CURRENT.md); where the build differs from this plan, the difference is called out with an **As built** note. Targets, resource allocations, and schedules are planning assumptions until a measurement is attached. The proposed defaults below make the project actionable without treating every decision in the original discussion as settled.
+
+**Naming.** Milestones are M0-M4 (Section 16). Two early documents use older "phase" names: [Phase 0](PHASE0.md) is the M0 source-validation work, and [Phase 1](PHASE1.md) is the rule baseline, which is the first part of M2. Both names stay as file names; new work uses M-numbers.
 
 Quick navigation:
 
@@ -304,6 +306,8 @@ Score a transaction's structural content once per detector/run in v1. Lifecycle 
 | Per-stage DLQ | Original key | 1 | 7 days, with byte cap | Inspection/replay command |
 | `entity.features`, later | Entity snapshot identity | 1 initially | 12 hours | Separate entity scorer |
 
+**As built (M1):** three topics exist, `blockpulse.raw.v1`, `blockpulse.enriched.v1`, and `blockpulse.errors.v1`, each with 3 partitions and **7-day** retention. Records are keyed by capture session ID (falling back to message ID), so one connection's messages stay in order on one partition; the per-`txid` keys in the table above are not used yet. There are no separate features/scored topics yet; features and rule screening run offline from JSONL. Add those topics in M2 only when a streaming feature/score worker exists.
+
 Use a namespace/prefix per live, test, and replay environment. Three partitions provide a small consumer-scaling exercise; they are not required by the initial transaction rate. Larger partition counts belong in a measured load experiment.
 
 Replication factor is 1 locally. Enable producer idempotence and appropriate acknowledgements, but do not interpret these settings as protection from loss of the only broker disk. Configure both time and byte limits; either can remove old records. Archive lag must stay comfortably below the effective retention boundary.
@@ -511,6 +515,8 @@ artifacts/evaluations/<run-id>/...
 Partition operational archives by receive date/hour so late event timestamps do not scatter writes; keep event time as a column. Store topic, partition, offset, record identity, schema version, and run identity.
 
 Buffer records with a time/size cap, finish the object, verify its checksum, publish a manifest describing its offset ranges and row count, then commit consumer offsets. Interrupted uploads and overlapping batches may exist, so readers use committed manifests and deduplication rather than guessing from filenames.
+
+**As built (M1):** the Parquet archiver writes **one small Zstandard Parquet file per Kafka message** under a run directory plus a single `manifest.json` with running totals. A stable file name per message ID makes restarts safe. Offset-range manifests, hourly partitioning, and compaction are still planned.
 
 Compaction creates a new manifest generation; only after it is validated may lifecycle cleanup remove superseded objects. Tiny low-volume batches are acceptable initially. Do not implement a complex compactor before basic archival and replay are reliable.
 
@@ -773,6 +779,20 @@ Milestones are ordered by dependency, not fixed calendar dates. Estimates assume
 
 **Done when:** one transaction can be traced from observation to archive, features, persisted score, and API result; replay reproduces it under the same versions.
 
+Suggested order, one small session each. Each step should end with a test, a short doc update, and a commit:
+
+| Step | Task | Status |
+| --- | --- | --- |
+| M2.0 | Structural features (`transaction-v2`) and explainable rule baseline (`structural-rules-v1`) | Done; see [Phase 1](PHASE1.md) |
+| M2.1 | Add Postgres to Compose; write a `transactions` + `scores` schema with a migration | Not started |
+| M2.2 | `blockpulse load-results`: load screened JSONL into Postgres with unique keys; prove re-running adds no duplicate rows | Not started |
+| M2.3 | Read-only FastAPI: `/healthz`, `/tx/{txid}`, `/alerts` with pagination | Not started |
+| M2.4 | Lifecycle projection: apply added/removed/mined/replaced events to `transactions` | Not started |
+| M2.5 | First Grafana dashboard over Postgres (alerts/hour, rule counts, event counts) | Not started |
+| M2.6 | End-to-end trace of one transaction plus a small offline demo fixture | Not started |
+
+A streaming feature/score worker (Kafka `features`/`scored` topics) is optional within M2; the offline path is enough to prove persistence and the API first.
+
 **First useful stopping point:** a complete streaming data-engineering project exists here, even before ML training.
 
 ### M3 — ML comparison and reproducible evaluation
@@ -857,7 +877,7 @@ Start CI with formatting, lint/type checks, unit/contract tests, and a bounded i
 
 ## 18. Proposed repository organization
 
-This tree is a target structure for later phases. The current small implementation uses flat modules in `src/blockpulse/` for capture, normalization, processing, and shared features, plus `tests/`. The initial learning script remains in `examples/`, with its walkthrough in `docs/learning/`. Infrastructure and ML packages below are still planned.
+This tree is a target structure for later phases. **As built**, `src/blockpulse/` is still flat: `capture.py`, `events.py`, `features.py`, `process.py`, `storage.py`, `detector.py`, `detect.py`, `lab.py`, `kafka_pipeline.py`, `kafka_workers.py`, `enrichment.py`, `parquet_archive.py`, and `cli.py`. [Current architecture](ARCHITECTURE_CURRENT.md) maps each one. `compose.yaml` sits at the repository root. Split into sub-packages once a module grows past easy reading, not in advance.
 
 ```text
 BlockPulse/
@@ -941,18 +961,25 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 
 | Milestone | Status | Evidence / next action |
 | --- | --- | --- |
-| Project reference | Drafted | This document and README |
-| M0: source and hardware validation | Complete for bounded local prototype | [Phase 0/1 validation](experiments/2026-10-09-phase0-phase1-validation.md): ten-minute capture, all four lifecycle types, replay, host snapshot, field completeness, payload distribution, and gaps recorded |
-| M1: ingest/archive/replay | Complete for the local learning pipeline | Live capture-to-Kafka preserves raw JSONL; saved-data replay, bounded enrichment, JSONL archive, and Zstandard Parquet archive run on the three-topic Kafka profile. A 402-message run yielded 6,983 events, 2,732 matching features, zero enrichment requests/errors, and zero final lag; restart behavior verified; 62 tests passed and one optional test skipped. Public WebSocket access was denied by the agent runtime, so source connectivity still needs a user-shell smoke test. See [M1 guide](M1_KAFKA.md). |
-| Local Phase 1 structural baseline | Complete as an explainable prototype | `transaction-v2` features, three rules, eight synthetic cases, threshold sweep, and a checked 2,732-row observation. No independent labels; detection quality is unknown. See [Phase 1](PHASE1.md). |
-| M2: features/baseline/API | In progress | Shared features and local baseline are done; queryable persistence, API/dashboard, and labeled evaluation remain open |
-| M3: ML/evaluation | Not started | Depends on M2 |
+| Project reference | Maintained | This document, README, and [CLAUDE.md](../CLAUDE.md) working notes |
+| M0: source and hardware validation | Complete (bounded local prototype) | [Connectivity](experiments/2026-10-08-source-connectivity.md) and [validation](experiments/2026-10-09-phase0-phase1-validation.md): ten-minute capture with 402 messages and 6,983 events; all four lifecycle types; byte-identical replay; host snapshot; reconnect gaps recorded |
+| M1: ingest/archive/replay | Complete (local) | [M1 guide](M1_KAFKA.md): capture-to-Kafka, saved-data replay, bounded REST enrichment, JSONL + Parquet archives, restart safety; 402-message replay reproduced 2,732 features exactly. **Open:** live `capture-kafka` from the user's own shell (the agent runtime was blocked from the public WebSocket) |
+| M2: features/baseline/API | In progress | M2.0 done ([Phase 1](PHASE1.md)); next is M2.1 (Postgres). See the step table in Section 16 |
+| M3: ML/evaluation | Not started | Depends on M2 and several days of recorded data |
 | M4: reliable local release | Not started | Depends on M3 |
 | E1: entity analysis | Deferred | Optional; gate on data coverage and memory |
 | E2: Kubernetes/networking | Deferred | Optional; gate on completed local core |
 | E3: AWS experiment | Deferred | Optional; gate on a current costed plan |
 
-**Next concrete task:** continue M2 by adding queryable result persistence and a small read-only API, then expose the existing baseline results. The M1 local streaming pipeline is complete and verified against the 402-message capture; public WebSocket access from the agent runtime was denied, so repeat the live source smoke test from the user’s PowerShell session when convenient. M0, Phase 1, and M1 are complete; meaningful detection-quality claims still require independent labels and a held-out evaluation.
+Test suite on 2026-10-12: 62 passed, 1 optional loopback test skipped.
+
+**Next session, in order:**
+
+1. **Live smoke test (about 5 minutes).** From your own PowerShell, start Kafka and run a 60-second `capture-kafka` (commands in the [M1 guide](M1_KAFKA.md)). This closes the one open M1 item.
+2. **Catch-up walkthrough (recommended).** M1 added about 1,700 lines quickly. Before building on it, walk through the Kafka path together using [the learning path](learning/README.md), Exercises 2-4.
+3. **M2.1.** Add Postgres to Compose and design the first two tables.
+
+**Housekeeping:** the Kafka container uses up to 1 GiB of RAM. Stop it when you're not working (`docker compose --profile m1 stop`); its data volume persists.
 
 ### 21.2 Returning after a break
 
@@ -960,7 +987,7 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 2. Check this tracker and the latest decision/experiment notes.
 3. Identify the current milestone and its unfinished acceptance criteria.
 4. Verify that source contracts and any planned cloud prices are still current.
-5. Run the existing offline demo/tests once those exist.
+5. Run the test suite and the offline demo (README "Quick start").
 6. Choose the smallest next task that advances the current milestone.
 7. Update the tracker, measured assumptions, and next task before stopping.
 
@@ -993,5 +1020,6 @@ Resources still running, if any:
 | 2026-10-09 | 0.8 | Started M1 with a pinned local Kafka broker profile, capture replay producer, restart-safe JSONL archive consumer, and broker-independent tests |
 | 2026-10-09 | 0.9 | Verified the 402-message raw Kafka round trip, exact processed feature/event records, and repeat-consumer behavior |
 | 2026-10-09 | 1.0 | Completed capture-to-Kafka, bounded enrichment, error topic, Zstandard Parquet archival, offset-safe restart behavior, throughput/lag summaries, and the full M1 local integration (62 passed, 1 skipped) |
+| 2026-10-12 | 1.1 | Documentation review: reconciled phase/milestone naming, recorded as-built differences (topics, keys, retention, Parquet layout), split M2 into small steps, refreshed the tracker and next steps, added a learning path and working notes |
 
 The supplied draft remains the origin of the idea. This document supersedes its stronger unverified claims about lossless public ingestion, guaranteed cloud caps, fixed entity recovery times, and real-world detection accuracy. Replace estimates with linked measurements as the project develops.

@@ -1,5 +1,7 @@
 # Phase 1: explainable structural screening
 
+> **Status:** complete. This is step M2.0 of milestone M2 in the [project plan](PROJECT_PLAN.md). Detection still runs offline on `features.jsonl`; persisting results to Postgres is the next M2 step.
+
 Phase 1's first offline structural baseline is implemented and checked against controlled cases and a ten-minute real observation. This validates rule mechanics, not real-world detection quality.
 
 It adds a small offline rules layer after Phase 0's capture and feature extraction:
@@ -74,4 +76,4 @@ When reviewing recorded rows, use the short [Phase 1 review rubric](PHASE1_REVIE
 
 The ten-minute real capture produced 2,732 complete feature rows and 73 structural signals. The rules and each signal were checked against the archived inputs, but the sample has no independent labels, so calibration and detection quality remain unknown. The controlled lab highlights benign shapes that also trigger the rules. The [manual-review rubric](PHASE1_REVIEW_RUBRIC.md) is ready for future labeled evaluation. Keep controlled results separate from real observations; do not call synthetic rule checks accuracy.
 
-After this baseline is understood, the next data-path step can persist versioned screen results alongside replay metadata, then add an API/read-only inspection path. Kafka and infrastructure should wait until local replay and measured volume justify them.
+Next: persist versioned screen results in Postgres (M2.1-M2.2), then add a read-only API (M2.3). See the M2 step table in the [project plan](PROJECT_PLAN.md#m2--features-baseline-and-inspectable-results).

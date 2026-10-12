@@ -18,7 +18,7 @@ A **data path** is the sequence of places data moves through and the transformat
 
 ## Run it
 
-Use Python 3.10 or newer. No package installation, Docker, or cloud account is needed.
+Use Python 3.11 or newer (the project's minimum). No package installation, Docker, or cloud account is needed.
 
 From PowerShell in the project folder:
 
@@ -135,10 +135,10 @@ Stop after the first two if the fields are still unfamiliar. Understanding one r
 
 ## What comes next
 
-The [Phase 0 capture and replay commands](../PHASE0.md) now implement the next step: bounded WebSocket capture, original message storage, duplicate handling, and offline feature tables. Use those observations to guide the Kafka ingestion design.
+Continue with the [learning path](README.md). Exercise 2 moves from one transaction to a continuous WebSocket stream, using the [Phase 0 capture and replay commands](../PHASE0.md).
 
 This example does not yet measure sustainable API limits, provide complete mempool coverage, or finish M0. It establishes the smallest readable path we can use to learn those things.
 
 ## Initial verification
 
-On 2026-10-08, sample mode and offline replay passed: replay made no HTTP calls, preserved the input file, and produced byte-identical feature output. Checks also covered virtual-size rounding, invalid weight, and confirmation-status independence. The development shell blocked an initial network request; a subsequent live verification did not finish and was stopped. Treat live API connectivity as unverified in this environment. Sample mode and offline replay are the reproducible starting point.
+On 2026-10-08, sample mode and offline replay passed: replay made no HTTP calls, preserved the input file, and produced byte-identical feature output. Checks also covered virtual-size rounding, invalid weight, and confirmation-status independence. The development shell blocked an initial network request; a subsequent live verification did not finish and was stopped. Treat live API connectivity as unverified in this environment. Sample mode and offline replay are the reproducible starting point. (Later, the default `mempool.space` host was found to time out from this network; see the [connectivity findings](../experiments/2026-10-08-source-connectivity.md). If live mode hangs, that is the likely cause.)

@@ -1,5 +1,7 @@
 # Phase 0: capture and replay the data path
 
+> **Status:** complete (this is milestone M0 in the [project plan](PROJECT_PLAN.md)). Kafka transport, REST enrichment, and Parquet archives were added later in [M1](M1_KAFKA.md). The commands below still work and are the simplest offline path.
+
 Implemented path:
 
 ```text
@@ -144,4 +146,4 @@ Verification on 2026-10-08:
 - A regional endpoint, `node203.sv1.mempool.space`, connected with normal certificate verification and delivered five messages containing 22 added transactions in a 6.968-second run. All 22 produced features with no missing inputs or parse issues. Processing the real capture twice produced byte-identical output files.
 - The follow-up ten-minute capture and corrected replacement schema are detailed in the [validation report](experiments/2026-10-09-phase0-phase1-validation.md). After the parser fix, two offline replays were byte-identical and all 44 tests passed with the loopback socket test enabled.
 
-The current Phase 0 validation, including a ten-minute bounded capture, lifecycle observations, host snapshot, size distribution, and deterministic replay, is recorded in the [2026-10-09 validation report](experiments/2026-10-09-phase0-phase1-validation.md). The source still has reconnect gaps, and the measured active-burst storage rate is not a long-run forecast. REST enrichment and Parquet storage remain later additions if evidence justifies them.
+The current Phase 0 validation, including a ten-minute bounded capture, lifecycle observations, host snapshot, size distribution, and deterministic replay, is recorded in the [2026-10-09 validation report](experiments/2026-10-09-phase0-phase1-validation.md). The source still has reconnect gaps, and the measured active-burst storage rate is not a long-run forecast. REST enrichment and Parquet storage were added in [M1](M1_KAFKA.md).

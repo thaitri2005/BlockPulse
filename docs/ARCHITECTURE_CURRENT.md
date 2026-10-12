@@ -22,6 +22,26 @@ The raw JSONL file is the source record. Kafka moves and buffers messages; it do
 
 Kafka consumers use a group ID to remember their progress. Reuse the same group ID and output directory to resume. A new group starts at the earliest retained message, so it can read old topic data again. Replaying a capture into a topic appends messages; avoid replaying it again unless you intend to test duplicate handling.
 
+## Where the code lives
+
+| Module | Lines | Role |
+| --- | ---: | --- |
+| `cli.py` | 207 | Command-line entry point; wires every command below to its module |
+| `capture.py` | 198 | Bounded WebSocket capture, reconnects, gap records, summary |
+| `events.py` | 118 | Parses one saved message into normalized lifecycle events |
+| `features.py` | 66 | Pure feature function shared by every path (`transaction-v2`) |
+| `process.py` | 131 | Offline: capture JSONL to events, features, errors |
+| `storage.py` | 56 | Run directories that are never overwritten; summary writing |
+| `detector.py` | 78 | The three structural rules (`structural-rules-v1`) |
+| `detect.py` | 108 | Offline: features to screened rows and alerts |
+| `lab.py` | 144 | Synthetic rule cases and threshold sweep |
+| `kafka_pipeline.py` | 388 | Topic creation, raw publisher, replay producer, JSONL archive consumer |
+| `kafka_workers.py` | 156 | Enrichment consumer loop |
+| `enrichment.py` | 157 | Rate-limited, budgeted REST fetch for incomplete transactions |
+| `parquet_archive.py` | 213 | Enriched topic to Parquet files and manifest |
+
+Kafka topics: `blockpulse.raw.v1`, `blockpulse.enriched.v1`, `blockpulse.errors.v1`. Each has 3 partitions and 7-day retention, and records are keyed by capture session ID.
+
 ## Technologies and how they fit
 
 Python runs the commands and pipeline logic. The websockets library receives live source messages. Apache Kafka runs in Docker Compose as one local KRaft broker; confluent-kafka connects Python producers and consumers to it. PyArrow writes Parquet, a compressed columnar format for later analysis. JSONL keeps the original messages inspectable and makes offline replay easy. CSV makes feature rows easy to open in a spreadsheet. pytest checks the parsing, features, Kafka behavior, and recovery rules.
