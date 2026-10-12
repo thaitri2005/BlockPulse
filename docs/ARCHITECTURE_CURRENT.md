@@ -5,6 +5,7 @@ BlockPulse listens for Bitcoin mempool updates, preserves what it observed, turn
     Live:       mempool WebSocket -> capture -> messages.jsonl -> process -> features -> detect
     Streaming:  WebSocket -> local messages.jsonl + Kafka raw topic -> enrich -> Kafka enriched topic -> Parquet
     Replay:     saved messages.jsonl -> Kafka raw topic -> JSONL archive -> process
+    Query:      process + detect output -> load-results / load-events -> Postgres -> API (serve) and Grafana
 
 The raw JSONL file is the source record. Kafka moves and buffers messages; it does not replace that file.
 
@@ -17,6 +18,7 @@ The raw JSONL file is the source record. Kafka moves and buffers messages; it do
 - kafka-archive reads raw Kafka messages and saves them to another messages.jsonl file. It syncs each new line before committing its Kafka offset; if restarted, it skips duplicate message IDs.
 - kafka-enrich reads raw messages and parses lifecycle events. When an added transaction already has the fields needed for features, it makes no web request. If those fields are missing, it fetches transaction details from the mempool.space REST API under a request-per-second limit and a per-run cap. Failures are written to the Kafka error topic.
 - kafka-parquet reads enriched messages and stores them as Zstandard-compressed Parquet files. Each message ID has a stable file, so a restart does not add it twice.
+- db-init creates the Postgres tables. load-results copies screened scores into Postgres; load-events copies lifecycle events and recomputes each touched transaction's status from its evidence. Both can be repeated safely. serve runs the read-only API, and trace shows everything stored about one txid and re-derives its features from the raw capture. See the [M2 guide](M2_POSTGRES.md).
 - process reads a saved capture JSONL file offline. It writes normalized lifecycle events, transaction features, and an error report.
 - detect reads features offline and flags three simple shapes: many inputs, many outputs, or repeated output values. A flag means unusual structure; it does not establish wrongdoing.
 
@@ -39,15 +41,19 @@ Kafka consumers use a group ID to remember their progress. Reuse the same group 
 | `kafka_workers.py` | 156 | Enrichment consumer loop |
 | `enrichment.py` | 157 | Rate-limited, budgeted REST fetch for incomplete transactions |
 | `parquet_archive.py` | 213 | Enriched topic to Parquet files and manifest |
-| `db.py` + `migrations/` | ~55 | Postgres connection and forward-only SQL migrations (`db-init`); tables exist but nothing writes to them yet |
+| `db.py` + `migrations/` | 56 | Postgres connection and forward-only SQL migrations (`db-init`) |
+| `results.py` | 83 | Duplicate-safe load of screened scores (`load-results`) |
+| `lifecycle.py` | 111 | Lifecycle evidence load and status projection (`load-events`) |
+| `api.py` | 176 | Read-only FastAPI app (`serve`) |
+| `trace.py` | 62 | Stored record to raw capture line, with a feature recomputation check |
 
 Kafka topics: `blockpulse.raw.v1`, `blockpulse.enriched.v1`, `blockpulse.errors.v1`. Each has 3 partitions and 7-day retention, and records are keyed by capture session ID.
 
 ## Technologies and how they fit
 
-Python runs the commands and pipeline logic. The websockets library receives live source messages. Apache Kafka runs in Docker Compose as one local KRaft broker; confluent-kafka connects Python producers and consumers to it. PyArrow writes Parquet, a compressed columnar format for later analysis. JSONL keeps the original messages inspectable and makes offline replay easy. CSV makes feature rows easy to open in a spreadsheet. pytest checks the parsing, features, Kafka behavior, and recovery rules.
+Python runs the commands and pipeline logic. PostgreSQL stores scores and lifecycle evidence for querying; FastAPI serves them read-only; Grafana charts them from the same database. The websockets library receives live source messages. Apache Kafka runs in Docker Compose as one local KRaft broker; confluent-kafka connects Python producers and consumers to it. PyArrow writes Parquet, a compressed columnar format for later analysis. JSONL keeps the original messages inspectable and makes offline replay easy. CSV makes feature rows easy to open in a spreadsheet. pytest checks the parsing, features, Kafka behavior, and recovery rules.
 
-The broker has one node, so it is a learning setup, not a highly available service. The current Parquet writer makes one small file per message for simple restart behavior. Enrichment only calls the public REST endpoint for incomplete added transactions, and the provider may return rate-limit errors. There is no database, API, dashboard, trained model, or entity analysis yet.
+The broker has one node, so it is a learning setup, not a highly available service. The current Parquet writer makes one small file per message for simple restart behavior. Enrichment only calls the public REST endpoint for incomplete added transactions, and the provider may return rate-limit errors. Postgres, the API, and one Grafana dashboard exist (M2). There is no trained model, streaming feature/score worker, or entity analysis yet: scoring still runs offline, and the Kafka path and the Postgres path are connected only through files.
 
 ## Check the verified run
 

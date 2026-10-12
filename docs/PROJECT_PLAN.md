@@ -2,8 +2,8 @@
 
 | Document field | Value |
 | --- | --- |
-| Status | M0 and M1 complete; M2 in progress (rule baseline done; persistence, API, dashboard open) |
-| Version | 1.2 |
+| Status | M0, M1, and M2 complete locally; M3 (ML comparison and evaluation) is next and needs more recorded data |
+| Version | 1.3 |
 | Created / last updated | 2026-10-08 / 2026-10-12 |
 | Intended builder | One developer working part-time |
 | Primary environment | Local machine; containers before Kubernetes |
@@ -518,6 +518,8 @@ Buffer records with a time/size cap, finish the object, verify its checksum, pub
 
 **As built (M1):** the Parquet archiver writes **one small Zstandard Parquet file per Kafka message** under a run directory plus a single `manifest.json` with running totals. A stable file name per message ID makes restarts safe. Offset-range manifests, hourly partitioning, and compaction are still planned.
 
+**As built (M2):** Postgres holds `transactions`, `scores`, `lifecycle_events`, and `schema_migrations` (see the [M2 guide](M2_POSTGRES.md)). The planned `alerts`, `evaluation_runs`, and `source_gaps` tables do not exist yet: an alert is a flagged row in `scores`, and gaps stay in the capture summaries. The 7-day score retention policy is not implemented.
+
 Compaction creates a new manifest generation; only after it is validated may lifecycle cleanup remove superseded objects. Tiny low-volume batches are acceptable initially. Do not implement a complex compactor before basic archival and replay are reliable.
 
 Retention is capacity-driven: begin with 3-7 days of raw/enriched data locally, retain small versioned evaluation fixtures longer, and expand only after measuring disk growth. A 30-day full-traffic archive is not assumed to fit in 40 GB.
@@ -785,11 +787,11 @@ Suggested order, one small session each. Each step should end with a test, a sho
 | --- | --- | --- |
 | M2.0 | Structural features (`transaction-v2`) and explainable rule baseline (`structural-rules-v1`) | Done; see [Phase 1](PHASE1.md) |
 | M2.1 | Add Postgres to Compose; write a `transactions` + `scores` schema with a migration | Done 2026-10-12; see [M2 Postgres](M2_POSTGRES.md) |
-| M2.2 | `blockpulse load-results`: load screened JSONL into Postgres with unique keys; prove re-running adds no duplicate rows | **Next** |
-| M2.3 | Read-only FastAPI: `/healthz`, `/tx/{txid}`, `/alerts` with pagination | Not started |
-| M2.4 | Lifecycle projection: apply added/removed/mined/replaced events to `transactions` | Not started |
-| M2.5 | First Grafana dashboard over Postgres (alerts/hour, rule counts, event counts) | Not started |
-| M2.6 | End-to-end trace of one transaction plus a small offline demo fixture | Not started |
+| M2.2 | `blockpulse load-results`: load screened JSONL into Postgres with unique keys; prove re-running adds no duplicate rows | Done 2026-10-12; see [M2 guide](M2_POSTGRES.md) |
+| M2.3 | Read-only FastAPI: `/healthz`, `/tx/{txid}`, `/alerts` with pagination | Done 2026-10-12; see [M2 guide](M2_POSTGRES.md) |
+| M2.4 | Lifecycle projection: apply added/removed/mined/replaced events to `transactions` | Done 2026-10-12; see [M2 guide](M2_POSTGRES.md) |
+| M2.5 | First Grafana dashboard over Postgres (alerts/hour, rule counts, event counts) | Done 2026-10-12; see [M2 guide](M2_POSTGRES.md) |
+| M2.6 | End-to-end trace of one transaction plus a small offline demo fixture | Done 2026-10-12; see [M2 guide](M2_POSTGRES.md) |
 
 A streaming feature/score worker (Kafka `features`/`scored` topics) is optional within M2; the offline path is enough to prove persistence and the API first.
 
@@ -964,22 +966,23 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 | Project reference | Maintained | This document, README, and [CLAUDE.md](../CLAUDE.md) working notes |
 | M0: source and hardware validation | Complete (bounded local prototype) | [Connectivity](experiments/2026-10-08-source-connectivity.md) and [validation](experiments/2026-10-09-phase0-phase1-validation.md): ten-minute capture with 402 messages and 6,983 events; all four lifecycle types; byte-identical replay; host snapshot; reconnect gaps recorded |
 | M1: ingest/archive/replay | Complete (local) | [M1 guide](M1_KAFKA.md): capture-to-Kafka, saved-data replay, bounded REST enrichment, JSONL + Parquet archives, restart safety; 402-message replay reproduced 2,732 features exactly. **Open:** live `capture-kafka` from the user's own shell (the agent runtime was blocked from the public WebSocket) |
-| M2: features/baseline/API | In progress | M2.0 and M2.1 done ([Phase 1](PHASE1.md), [M2 Postgres](M2_POSTGRES.md)); next is M2.2 (load screened results with duplicate-safe writes). See the step table in Section 16 |
+| M2: features/baseline/API | Complete (local) | [M2 guide](M2_POSTGRES.md): Postgres store with duplicate-safe loads, lifecycle projection, read-only API, Grafana dashboard, `trace` command, offline demo script. Real capture reproduced exactly: 2,732 scores (73 flagged), 6,983 events, 6,259 transactions. **Not done from the M2 list:** a streaming feature/score worker (offline path only), `source_gaps`/`evaluation_runs`/`alerts` tables, and labeled evaluation (M3) |
 | M3: ML/evaluation | Not started | Depends on M2 and several days of recorded data |
 | M4: reliable local release | Not started | Depends on M3 |
 | E1: entity analysis | Deferred | Optional; gate on data coverage and memory |
 | E2: Kubernetes/networking | Deferred | Optional; gate on completed local core |
 | E3: AWS experiment | Deferred | Optional; gate on a current costed plan |
 
-Test suite on 2026-10-12: 66 passed with `BLOCKPULSE_TEST_DSN` set (62 without it), 1 optional loopback test skipped.
+Test suite on 2026-10-12: 78 passed with `BLOCKPULSE_TEST_DSN` set (65 passed and 14 skipped without it); the optional loopback test is one of the skips.
 
 **Next session, in order:**
 
-1. **Live smoke test (about 5 minutes).** From your own PowerShell, start Kafka and run a 60-second `capture-kafka` (commands in the [M1 guide](M1_KAFKA.md)). This closes the one open M1 item.
-2. **Catch-up walkthrough (recommended).** M1 added about 1,700 lines quickly. Before building on it, walk through the Kafka path together using [the learning path](learning/README.md), Exercises 2-4.
-3. **M2.2.** Load the existing `screened.jsonl` into Postgres and prove a second load adds no rows.
+1. **Live smoke test (about 5 minutes).** From your own PowerShell, start Kafka and run a 60-second `capture-kafka` (commands in the [M1 guide](M1_KAFKA.md)). It closes the one open M1 item.
+2. **Start collecting data for M3.** M3 compares detectors on chronological splits and wants several days of traffic, but only 10 minutes exist. Decide a bounded daily capture routine (for example 10 minutes a day at about 12 MiB each) and keep a log of dates; do not run an unbounded capture.
+3. **Catch-up walkthrough.** Code from M1 and M2 has no guided explanation yet. Use the [learning path](learning/README.md) to go through it.
+4. **M3 groundwork** once there are a few days of data: dataset manifests and a temporal split, then the labeled structural-injection fixtures and the review rubric into an evaluation report.
 
-**Housekeeping:** the Kafka container uses up to 1 GiB of RAM. Stop it when you're not working (`docker compose --profile m1 stop`); its data volume persists.
+**Housekeeping:** Kafka (up to 1 GiB), Postgres (512 MB), and Grafana (384 MB) are separate Compose profiles. Stop what you aren't using (`docker compose --profile m1 stop`, `docker compose --profile m2 stop`); data volumes persist.
 
 ### 21.2 Returning after a break
 
@@ -1020,6 +1023,7 @@ Resources still running, if any:
 | 2026-10-09 | 0.8 | Started M1 with a pinned local Kafka broker profile, capture replay producer, restart-safe JSONL archive consumer, and broker-independent tests |
 | 2026-10-09 | 0.9 | Verified the 402-message raw Kafka round trip, exact processed feature/event records, and repeat-consumer behavior |
 | 2026-10-09 | 1.0 | Completed capture-to-Kafka, bounded enrichment, error topic, Zstandard Parquet archival, offset-safe restart behavior, throughput/lag summaries, and the full M1 local integration (62 passed, 1 skipped) |
+| 2026-10-12 | 1.3 | Completed M2: duplicate-safe score and lifecycle loads, evidence-based status projection, read-only API, provisioned Grafana dashboard, transaction trace with replay check, offline demo script, and an end-to-end test |
 | 2026-10-12 | 1.2 | M2.1: added a Postgres Compose profile, migration runner (`db-init`), and the first `transactions`/`scores` tables with a duplicate-rejecting unique key |
 | 2026-10-12 | 1.1 | Documentation review: reconciled phase/milestone naming, recorded as-built differences (topics, keys, retention, Parquet layout), split M2 into small steps, refreshed the tracker and next steps, added a learning path and working notes |
 

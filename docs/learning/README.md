@@ -21,7 +21,10 @@ Each exercise is sized for one sitting of about 30-60 minutes. Stop when a conce
 | 5 | Kafka basics with our own data | Topics, partitions, keys, producers, offsets | `kafka_pipeline.py` → `RawKafkaPublisher`, `publish_capture()` | To write together |
 | 6 | Consumers, commits, and restarts | Consumer groups, at-least-once, idempotent sinks, lag | `kafka_pipeline.py` → `archive_topic()`; `parquet_archive.py` | To write together |
 | 7 | Enrichment under a budget | Rate limits, retries, error topics, backpressure | `enrichment.py` → `RateLimitedEnricher`; `kafka_workers.py` → `enrich_topic()` | To write together |
-| 8 | Why a database, and what a unique key buys us | Tables, constraints, migrations, idempotent writes | `migrations/001_initial.sql`; `db.py` → `apply_migrations()` | To write together |
+| 8 | Why a database, and what a unique key buys us | Tables, constraints, migrations, idempotent writes | `migrations/001_initial.sql`; `db.py` → `apply_migrations()`; `results.py` | To write together |
+| 9 | Evidence versus projection | Lifecycle events, order-independent status, why late data can't roll status back | `lifecycle.py` → `PROJECT`; `tests/test_lifecycle.py` | To write together |
+| 10 | A read-only API and a dashboard | Keyset pagination, input validation, read-only connections, SQL panels | `api.py` → `list_alerts()`; `observability/grafana/dashboards/` | To write together |
+| 11 | Tracing one transaction end to end | Provenance, replay check, why raw data is kept | `trace.py`; run `scripts/demo_m2.ps1` first | To write together |
 
 ## Exercise outlines
 

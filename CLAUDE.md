@@ -19,9 +19,10 @@ The project owner is learning streaming data engineering while building this. Op
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # expect 62 passed, 1 skipped; 66 passed if BLOCKPULSE_TEST_DSN is set (see docs/M2_POSTGRES.md)
+.\.venv\Scripts\python.exe -m pytest -q          # 65 passed, 14 skipped; with BLOCKPULSE_TEST_DSN set (see docs/M2_POSTGRES.md): 78 passed, 1 skipped
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
+docker compose --profile m2 up -d --wait          # Postgres + Grafana (~900 MB); `stop` when done
 ```
 
 The live WebSocket needs `--url wss://node203.sv1.mempool.space/api/v1/ws`, because the default host times out from this network. The agent runtime may be blocked from public WebSockets entirely; ask the user to run live captures from their own shell.
@@ -29,6 +30,8 @@ The live WebSocket needs `--url wss://node203.sv1.mempool.space/api/v1/ws`, beca
 ## Conventions
 
 - `data/` is git-ignored local evidence. Never delete or overwrite run directories; commands create new ones.
+- Tests must not hit the public API. Postgres tests drop the `public` schema: only ever point `BLOCKPULSE_TEST_DSN` at `blockpulse_test`.
+- Schema changes are new numbered files in `src/blockpulse/migrations/`; never edit an applied one.
 - Tests must not hit the public API. Use the fixtures in `examples/fixtures/` or mocks, as the existing tests do.
 - Amounts are integer satoshis. Missing values are errors, never zero.
 - Feature or rule changes bump `FEATURE_SET_VERSION` / `RULESET_VERSION`.

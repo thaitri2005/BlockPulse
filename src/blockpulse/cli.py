@@ -99,6 +99,10 @@ def main(argv: list[str] | None = None) -> int:
     serve = commands.add_parser("serve", help="Run the read-only API (localhost only unless --host is changed)")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
+    trace = commands.add_parser("trace", help="Show everything stored about one txid; with --capture, re-derive its features from the archive")
+    trace.add_argument("txid")
+    trace.add_argument("--capture", type=Path, help="The messages.jsonl the data was loaded from")
+    trace.add_argument("--brief", action="store_true", help="Print a short human summary instead of the full JSON")
     args = parser.parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
@@ -197,6 +201,25 @@ def main(argv: list[str] | None = None) -> int:
                 raise RuntimeError('uvicorn is not installed; run: pip install -e ".[m2]"') from error
             uvicorn.run("blockpulse.api:create_default_app", factory=True, host=args.host, port=args.port)
             return 0
+        elif args.command == "trace":
+            from blockpulse import db
+            from blockpulse.trace import trace_transaction
+            output = None
+
+            def run_trace():
+                with db.connect() as connection:
+                    return trace_transaction(connection, args.txid.lower(), args.capture)
+            summary = _kafka_call("Transaction trace", run_trace)
+            check = summary["replay_check"]
+            if args.brief:
+                flagged = [s["is_flagged"] for s in summary["scores"]]
+                print(f"status: {summary['transaction']['lifecycle_status']}; scores: {len(flagged)} ({sum(flagged)} flagged); "
+                      f"lifecycle events: {', '.join(e['event_type'] for e in summary['lifecycle_events']) or 'none'}")
+                if check is not None:
+                    print(f"archived features match stored features: {check['matches_stored_features']}")
+            else:
+                print(json.dumps(summary, indent=2, default=str))
+            return 0 if check is None or check["matches_stored_features"] is not False else 4
         elif args.command == "kafka-init":
             output = None
             summary = _kafka_call("Kafka topic initialization", lambda: create_m1_topics(args.bootstrap_servers))
