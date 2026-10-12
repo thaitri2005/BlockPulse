@@ -28,9 +28,10 @@ def clean_connection():
 @needs_postgres
 def test_apply_is_idempotent(clean_connection):
     first = db.apply_migrations(clean_connection)
-    assert first["applied"] == ["001_initial"]
+    expected = [version for version, _, _ in db.list_migrations()]
+    assert first["applied"] == expected
     second = db.apply_migrations(clean_connection)
-    assert second == {"applied": [], "already_applied": ["001_initial"]}
+    assert second == {"applied": [], "already_applied": expected}
 
 
 @needs_postgres

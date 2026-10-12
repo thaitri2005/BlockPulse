@@ -94,6 +94,8 @@ def main(argv: list[str] | None = None) -> int:
     load_results = commands.add_parser("load-results", help="Load screened.jsonl into Postgres (safe to repeat)")
     load_results.add_argument("source", type=Path, help="A `detect` output directory or its screened.jsonl")
     load_results.add_argument("--run-id", help="Identity of this result set; default is the directory name")
+    load_events_parser = commands.add_parser("load-events", help="Load lifecycle events into Postgres and refresh transaction status (safe to repeat)")
+    load_events_parser.add_argument("source", type=Path, help="A `process` output directory or its events.jsonl")
     args = parser.parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
@@ -175,6 +177,16 @@ def main(argv: list[str] | None = None) -> int:
                     return load_screened(connection, args.source, run_id)
             summary = _kafka_call("Result load", run_load)
             code = 0 if summary["conflicts"] == 0 and summary["invalid"] == 0 else 4
+        elif args.command == "load-events":
+            from blockpulse import db
+            from blockpulse.lifecycle import load_events
+            output = None
+
+            def run_load_events():
+                with db.connect() as connection:
+                    return load_events(connection, args.source)
+            summary = _kafka_call("Lifecycle load", run_load_events)
+            code = 0 if summary["invalid"] == 0 else 4
         elif args.command == "kafka-init":
             output = None
             summary = _kafka_call("Kafka topic initialization", lambda: create_m1_topics(args.bootstrap_servers))
