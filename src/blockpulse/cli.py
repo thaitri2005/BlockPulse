@@ -90,6 +90,7 @@ def main(argv: list[str] | None = None) -> int:
     kafka_parquet.add_argument("--bootstrap-servers", default=DEFAULT_BOOTSTRAP_SERVERS)
     kafka_parquet.add_argument("--max-messages", type=int)
     kafka_parquet.add_argument("--idle-timeout", type=float, default=3.0)
+    commands.add_parser("db-init", help="Apply pending Postgres migrations (uses BLOCKPULSE_DSN or the local default)")
     args = parser.parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
@@ -151,6 +152,15 @@ def main(argv: list[str] | None = None) -> int:
                 output = args.output or new_run_path(Path("data/labs"), "rule-lab")
                 summary = run_rule_lab(output)
                 code = 0 if summary["cases_matching_expected_rules"] == summary["scenario_count"] else 4
+        elif args.command == "db-init":
+            from blockpulse import db
+            output = None
+
+            def run_db_init():
+                with db.connect() as connection:
+                    return db.apply_migrations(connection)
+            summary = _kafka_call("Database initialization", run_db_init)
+            code = 0
         elif args.command == "kafka-init":
             output = None
             summary = _kafka_call("Kafka topic initialization", lambda: create_m1_topics(args.bootstrap_servers))

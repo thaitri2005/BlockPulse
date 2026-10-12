@@ -14,12 +14,16 @@ dependencies = ["websockets==15.0.1"]
 dev = ["pytest==8.4.2"]
 kafka = ["confluent-kafka==2.16.0"]
 m1 = ["confluent-kafka==2.16.0", "pyarrow==25.0.0"]
+m2 = ["psycopg[binary]==3.3.4"]
 
 [project.scripts]
 blockpulse = "blockpulse.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+blockpulse = ["migrations/*.sql"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

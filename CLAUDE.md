@@ -19,7 +19,7 @@ The project owner is learning streaming data engineering while building this. Op
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # expect 62 passed, 1 skipped (as of 2026-10-12)
+.\.venv\Scripts\python.exe -m pytest -q          # expect 62 passed, 1 skipped; 66 passed if BLOCKPULSE_TEST_DSN is set (see docs/M2_POSTGRES.md)
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
 ```

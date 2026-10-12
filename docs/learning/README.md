@@ -20,6 +20,7 @@ Each exercise is sized for one sitting of about 30-60 minutes. Stop when a conce
 | 4 | Rules as a first detector | Thresholds, explainability, why flags aren't labels | `detector.py` → `screen_transaction()`; `lab.py` | To write together |
 | 5 | Kafka basics with our own data | Topics, partitions, keys, producers, offsets | `kafka_pipeline.py` → `RawKafkaPublisher`, `publish_capture()` | To write together |
 | 6 | Consumers, commits, and restarts | Consumer groups, at-least-once, idempotent sinks, lag | `kafka_pipeline.py` → `archive_topic()`; `parquet_archive.py` | To write together |
+| 8 | Why a database, and what a unique key buys us | Tables, constraints, migrations, idempotent writes | `migrations/001_initial.sql`; `db.py` → `apply_migrations()` | To write together |
 | 7 | Enrichment under a budget | Rate limits, retries, error topics, backpressure | `enrichment.py` → `RateLimitedEnricher`; `kafka_workers.py` → `enrich_topic()` | To write together |
 
 ## Exercise outlines

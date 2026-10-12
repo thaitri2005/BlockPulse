@@ -39,6 +39,7 @@ Kafka consumers use a group ID to remember their progress. Reuse the same group 
 | `kafka_workers.py` | 156 | Enrichment consumer loop |
 | `enrichment.py` | 157 | Rate-limited, budgeted REST fetch for incomplete transactions |
 | `parquet_archive.py` | 213 | Enriched topic to Parquet files and manifest |
+| `db.py` + `migrations/` | ~55 | Postgres connection and forward-only SQL migrations (`db-init`); tables exist but nothing writes to them yet |
 
 Kafka topics: `blockpulse.raw.v1`, `blockpulse.enriched.v1`, `blockpulse.errors.v1`. Each has 3 partitions and 7-day retention, and records are keyed by capture session ID.
 
