@@ -231,7 +231,7 @@
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "",
+          "fields": "/^latest$/",
           "values": false
         },
         "colorMode": "none",
