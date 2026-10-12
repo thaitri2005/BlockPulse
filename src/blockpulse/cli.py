@@ -91,6 +91,9 @@ def main(argv: list[str] | None = None) -> int:
     kafka_parquet.add_argument("--max-messages", type=int)
     kafka_parquet.add_argument("--idle-timeout", type=float, default=3.0)
     commands.add_parser("db-init", help="Apply pending Postgres migrations (uses BLOCKPULSE_DSN or the local default)")
+    load_results = commands.add_parser("load-results", help="Load screened.jsonl into Postgres (safe to repeat)")
+    load_results.add_argument("source", type=Path, help="A `detect` output directory or its screened.jsonl")
+    load_results.add_argument("--run-id", help="Identity of this result set; default is the directory name")
     args = parser.parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
@@ -161,6 +164,17 @@ def main(argv: list[str] | None = None) -> int:
                     return db.apply_migrations(connection)
             summary = _kafka_call("Database initialization", run_db_init)
             code = 0
+        elif args.command == "load-results":
+            from blockpulse import db
+            from blockpulse.results import load_screened
+            output = None
+            run_id = args.run_id or (args.source if args.source.is_dir() else args.source.parent).resolve().name
+
+            def run_load():
+                with db.connect() as connection:
+                    return load_screened(connection, args.source, run_id)
+            summary = _kafka_call("Result load", run_load)
+            code = 0 if summary["conflicts"] == 0 and summary["invalid"] == 0 else 4
         elif args.command == "kafka-init":
             output = None
             summary = _kafka_call("Kafka topic initialization", lambda: create_m1_topics(args.bootstrap_servers))
