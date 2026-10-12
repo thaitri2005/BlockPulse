@@ -1,0 +1,392 @@
+{
+  "uid": "blockpulse-overview",
+  "title": "BlockPulse overview",
+  "tags": [
+    "blockpulse"
+  ],
+  "schemaVersion": 41,
+  "version": 1,
+  "editable": false,
+  "refresh": "",
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "description": "Stored scores and lifecycle evidence. Widen the time range if empty: loaded captures keep their original receive times.",
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Scored transactions",
+      "description": "Rows in the scores table inside the selected time range.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "blockpulse-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "blockpulse-pg"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT count(*) AS scored FROM scores WHERE $__timeFilter(received_at)"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Flagged",
+      "description": "Rule matches. A flag is unusual structure, not wrongdoing.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "blockpulse-pg"
+      },
+      "gridPos": {
+        "x": 4,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "blockpulse-pg"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT count(*) AS flagged FROM scores WHERE is_flagged AND $__timeFilter(received_at)"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Flag rate",
+      "description": "Share of scored transactions with at least one signal.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "blockpulse-pg"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "blockpulse-pg"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT COALESCE(100.0 * count(*) FILTER (WHERE is_flagged) / NULLIF(count(*), 0), 0) AS flag_rate FROM scores WHERE $__timeFilter(received_at)"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Lifecycle events",
+      "description": "Added, removed, mined, and replaced observations stored.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "blockpulse-pg"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 4,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "blockpulse-pg"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT count(*) AS events FROM lifecycle_events WHERE $__timeFilter(event_time)"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Latest score",
+      "description": "When the newest stored score was received. Old data is not a live feed.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "blockpulse-pg"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 0,
+        "w": 8,
+        "h": 4
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "blockpulse-pg"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT max(received_at) AS latest FROM scores"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "dateTimeAsIso"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Scored and flagged per minute",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "blockpulse-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 16,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "blockpulse-pg"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT $__timeGroupAlias(received_at, '1m'), count(*) AS scored, count(*) FILTER (WHERE is_flagged) AS flagged FROM scores WHERE $__timeFilter(received_at) GROUP BY 1 ORDER BY 1"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 60
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "type": "barchart",
+      "title": "Signals by rule",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "blockpulse-pg"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 4,
+        "w": 8,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "blockpulse-pg"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT s->>'rule_id' AS rule, count(*) AS signals FROM scores, jsonb_array_elements(signals) AS s WHERE $__timeFilter(received_at) GROUP BY 1 ORDER BY 2 DESC"
+        }
+      ],
+      "options": {
+        "xField": "rule",
+        "orientation": "horizontal",
+        "legend": {
+          "showLegend": false
+        }
+      }
+    },
+    {
+      "id": 8,
+      "type": "piechart",
+      "title": "Transactions by lifecycle status",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "blockpulse-pg"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 13,
+        "w": 8,
+        "h": 9
+      },
+      "description": "Latest evidence per transaction, as projected from stored lifecycle events.",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "blockpulse-pg"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT lifecycle_status, count(*) AS transactions FROM transactions WHERE $__timeFilter(last_seen_at) GROUP BY 1 ORDER BY 2 DESC"
+        }
+      ],
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "pieType": "donut",
+        "legend": {
+          "displayMode": "table",
+          "placement": "right"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "type": "table",
+      "title": "Latest alerts",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "blockpulse-pg"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 13,
+        "w": 16,
+        "h": 9
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "blockpulse-pg"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "editorMode": "code",
+          "rawSql": "SELECT s.received_at, s.id, s.txid, (SELECT string_agg(x->>'rule_id', ', ') FROM jsonb_array_elements(s.signals) x) AS rules, (s.features->>'n_in')::int AS n_in, (s.features->>'n_out')::int AS n_out, t.lifecycle_status FROM scores s LEFT JOIN transactions t USING (txid) WHERE s.is_flagged AND $__timeFilter(s.received_at) ORDER BY s.received_at DESC, s.id DESC LIMIT 50"
+        }
+      ],
+      "description": "Newest 50 flagged rows. Use GET /alerts/{id} for the full explanation."
+    }
+  ]
+}

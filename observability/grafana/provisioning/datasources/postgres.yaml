@@ -1,0 +1,16 @@
+apiVersion: 1
+datasources:
+  - name: BlockPulse
+    uid: blockpulse-pg
+    type: grafana-postgresql-datasource
+    access: proxy
+    url: postgres:5432
+    user: blockpulse
+    isDefault: true
+    jsonData:
+      database: blockpulse
+      sslmode: disable
+      postgresVersion: 1700
+      timescaledb: false
+    secureJsonData:
+      password: ${POSTGRES_PASSWORD}
