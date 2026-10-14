@@ -301,7 +301,6 @@ def main(argv: list[str] | None = None) -> int:
             code = 0
         elif args.command == "detectors":
             from blockpulse import registry
-            from blockpulse.detector import DetectorConfig
             output = None
             args.root.mkdir(parents=True, exist_ok=True)
             code = 0
