@@ -46,6 +46,7 @@ Kafka consumers use a group ID to remember their progress. Reuse the same group 
 | `lifecycle.py` | 111 | Lifecycle evidence load and status projection (`load-events`) |
 | `api.py` | 176 | Read-only FastAPI app (`serve`) |
 | `trace.py` | 62 | Stored record to raw capture line, with a feature recomputation check |
+| `sweep.py` | ~190 | Seeded, consistent synthetic transactions with labels; scores them with the rules and the calibrated model (`sweep`) |
 | `evaluate.py` | ~150 | Threshold calibration, test scoring, agreement with the rules (`evaluate-iforest`) |
 | `model.py` | ~150 | Isolation Forest training, feature transforms, checksummed save/load (`train-iforest`); needs the `ml` extra |
 | `dataset.py` | ~190 | Checksummed chronological train/calibration/test manifest (`build-dataset`) and verified split loading |

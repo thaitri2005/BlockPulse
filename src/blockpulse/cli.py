@@ -120,6 +120,13 @@ def main(argv: list[str] | None = None) -> int:
     evaluate.add_argument("--root", type=Path, default=Path("data/screened"))
     evaluate.add_argument("--alerts-per-1000", type=float, default=25.0, help="Alert budget on calibration traffic")
     evaluate.add_argument("--output", type=Path, help="New directory; default data/evaluations/<model name>-budget<N>")
+    sweep = commands.add_parser("sweep", help="Run labeled synthetic patterns through the rules and the calibrated model")
+    sweep.add_argument("manifest", type=Path)
+    sweep.add_argument("model", type=Path, help="Model directory from train-iforest")
+    sweep.add_argument("evaluation", type=Path, help="Directory from evaluate-iforest (supplies the calibrated threshold)")
+    sweep.add_argument("--root", type=Path, default=Path("data/screened"))
+    sweep.add_argument("--seed", type=int, default=11)
+    sweep.add_argument("--output", type=Path, help="New directory; default data/sweeps/<evaluation name>-seed<N>")
     args = parser.parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
@@ -264,6 +271,15 @@ def main(argv: list[str] | None = None) -> int:
             manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
             output = args.output or Path("data/evaluations") / f"{args.model.name}-budget{args.alerts_per_1000:g}"
             summary = evaluate_detector(manifest, args.root, args.model, output, alerts_per_1000=args.alerts_per_1000)
+            code = 0
+        elif args.command == "sweep":
+            try:
+                from blockpulse.sweep import run_sweep
+            except ImportError as error:
+                raise RuntimeError('scikit-learn is not installed; run: pip install -e ".[ml]"') from error
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            output = args.output or Path("data/sweeps") / f"{args.evaluation.name}-seed{args.seed}"
+            summary = run_sweep(manifest, args.root, args.model, args.evaluation, output, seed=args.seed)
             code = 0
         elif args.command == "kafka-init":
             output = None
