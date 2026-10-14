@@ -3,7 +3,7 @@
 | Document field | Value |
 | --- | --- |
 | Status | M0, M1, and M2 complete locally; M3 (ML comparison and evaluation) in progress, started with the dataset manifest |
-| Version | 1.5 |
+| Version | 1.6 |
 | Created / last updated | 2026-10-08 / 2026-10-14 |
 | Intended builder | One developer working part-time |
 | Primary environment | Local machine; containers before Kubernetes |
@@ -815,8 +815,8 @@ Suggested steps, one session each:
 | --- | --- | --- |
 | M3.1 | Dataset manifest and chronological split by session, with checksums | Done 2026-10-14; see [M3 dataset](M3_DATASET.md) |
 | M3.2 | Fit an Isolation Forest on the train split (bounded size, fixed seed); record fit time and peak memory | Done 2026-10-14; see [M3 model](M3_MODEL.md) |
-| M3.3 | Calibrate a threshold on the calibration split for a stated alerts-per-1,000 budget; score the test split; compare flags with the rules | **Next** |
-| M3.4 | Structural injection sweep and benign controls (labeled synthetic fixtures, kept out of training) | Not started |
+| M3.3 | Calibrate a threshold on the calibration split for a stated alerts-per-1,000 budget; score the test split; compare flags with the rules | Done 2026-10-14; see [M3 evaluation](M3_EVALUATION.md) and the [first results](experiments/2026-10-14-m3-first-evaluation.md) |
+| M3.4 | Structural injection sweep and benign controls (labeled synthetic fixtures, kept out of training) | **Next** |
 | M3.5 | Model artifact with metadata (feature hash, seed, dataset manifest ID), compatibility check, rollback; MLflow only if it earns its place | Not started |
 | M3.6 | Evaluation report: what is supported, what is not | Not started |
 
@@ -978,7 +978,7 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 | M0: source and hardware validation | Complete (bounded local prototype) | [Connectivity](experiments/2026-10-08-source-connectivity.md) and [validation](experiments/2026-10-09-phase0-phase1-validation.md): ten-minute capture with 402 messages and 6,983 events; all four lifecycle types; byte-identical replay; host snapshot; reconnect gaps recorded |
 | M1: ingest/archive/replay | Complete (local) | [M1 guide](M1_KAFKA.md): capture-to-Kafka, saved-data replay, bounded REST enrichment, JSONL + Parquet archives, restart safety; 402-message replay reproduced 2,732 features exactly. **Open:** live `capture-kafka` from the user's own shell (the agent runtime was blocked from the public WebSocket) |
 | M2: features/baseline/API | Complete (local) | [M2 guide](M2_POSTGRES.md): Postgres store with duplicate-safe loads, lifecycle projection, read-only API, Grafana dashboard, `trace` command, offline demo script. Real capture reproduced exactly: 2,732 scores (73 flagged), 6,983 events, 6,259 transactions. **Not done from the M2 list:** a streaming feature/score worker (offline path only), `source_gaps`/`evaluation_runs`/`alerts` tables, and labeled evaluation (M3) |
-| M3: ML/evaluation | In progress | M3.1 done: [dataset manifest](M3_DATASET.md) over 15,515 rows from 5 sessions (train 8,186 / calibration 5,021 / test 2,308). Calibration and test are single 10-minute windows, so early results are pipeline checks only. M3.2 done: [Isolation Forest](M3_MODEL.md) fitted on the 8,186-row train split (1.5 s, 143 MB process peak, deterministic refit); no threshold yet. Next: M3.3 calibration and comparison with the rules |
+| M3: ML/evaluation | In progress | M3.1 done: [dataset manifest](M3_DATASET.md) over 15,515 rows from 5 sessions (train 8,186 / calibration 5,021 / test 2,308). Calibration and test are single 10-minute windows, so early results are pipeline checks only. M3.2 done: [Isolation Forest](M3_MODEL.md) fitted on the 8,186-row train split (1.5 s, 143 MB process peak, deterministic refit); no threshold yet. M3.3 done: threshold calibrated at 25 alerts per 1,000; the test window flagged 65 per 1,000 (rules rose 3.4x too), so the rate did not carry over; model flags include ordinary-looking rows. Next: M3.4 labeled synthetic sweep |
 | M4: reliable local release | Not started | Depends on M3 |
 | E1: entity analysis | Deferred | Optional; gate on data coverage and memory |
 | E2: Kubernetes/networking | Deferred | Optional; gate on completed local core |
@@ -988,7 +988,7 @@ Test suite on 2026-10-12: 78 passed with `BLOCKPULSE_TEST_DSN` set (65 passed an
 
 **Next session, in order:**
 
-1. **M3.3: threshold and comparison.** Calibrate a threshold on the calibration split for a stated alert budget, score the test split, and compare model flags with rule flags. Remember all of it is a pipeline check until more sessions exist.
+1. **M3.4: labeled synthetic sweep.** Build fan-in/fan-out/equal-output patterns of varying severity plus benign look-alikes, kept out of training, and see how the rules and the model each respond. Also decide the alert budget you actually want (the 25 per 1,000 default is about 750 alerts per hour on this traffic).
 2. **Keep collecting.** Run `scripts/capture_session.ps1` about once a day, ideally including a midday UTC and a weekend session. Rebuild the manifest with `build-dataset` when new sessions exist and keep the old manifest file; an evaluation is tied to the manifest it used.
 3. **Live Kafka smoke test (about 5 minutes).** Run a 60-second `capture-kafka` from your own shell ([M1 guide](M1_KAFKA.md)). It closes the one open M1 item.
 4. **Catch-up walkthrough.** M1 and M2 code has no guided explanation yet; see the [learning path](learning/README.md).
@@ -1034,6 +1034,7 @@ Resources still running, if any:
 | 2026-10-09 | 0.8 | Started M1 with a pinned local Kafka broker profile, capture replay producer, restart-safe JSONL archive consumer, and broker-independent tests |
 | 2026-10-09 | 0.9 | Verified the 402-message raw Kafka round trip, exact processed feature/event records, and repeat-consumer behavior |
 | 2026-10-09 | 1.0 | Completed capture-to-Kafka, bounded enrichment, error topic, Zstandard Parquet archival, offset-safe restart behavior, throughput/lag summaries, and the full M1 local integration (62 passed, 1 skipped) |
+| 2026-10-14 | 1.6 | M3.3: alert-budget threshold calibration, single-pass test scoring, agreement with the rules, descriptive most-unusual-feature context, and the first evaluation report with its limits |
 | 2026-10-14 | 1.5 | M3.2: Isolation Forest trained on the manifest's train split with log transforms, fixed seed, checksummed artifact and metadata, determinism check, and measured fit cost |
 | 2026-10-14 | 1.4 | Started M3: dataset manifests with a deterministic chronological split by session, checksums, capture-quality provenance, and exclusion reasons; added a capture session script and its log |
 | 2026-10-12 | 1.3 | Completed M2: duplicate-safe score and lifecycle loads, evidence-based status projection, read-only API, provisioned Grafana dashboard, transaction trace with replay check, offline demo script, and an end-to-end test |

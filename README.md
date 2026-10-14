@@ -11,7 +11,7 @@ A flag means *unusual structure*. It is not a fraud probability or evidence of w
 | M0: validate the source | ✅ Done: ten-minute live capture, replay is byte-identical |
 | M1: Kafka ingest, archive, replay | ✅ Done locally. Open item: live `capture-kafka` smoke test from your own shell |
 | M2: features, baseline, API | ✅ Done locally: Postgres store, read-only API, Grafana dashboard, `trace` ([guide](docs/M2_POSTGRES.md)) |
-| M3: ML comparison | 🔄 In progress: dataset manifest and chronological split done ([guide](docs/M3_DATASET.md)); Isolation Forest fitted ([guide](docs/M3_MODEL.md)); next is threshold calibration and comparison with the rules |
+| M3: ML comparison | 🔄 In progress: dataset manifest and chronological split done ([guide](docs/M3_DATASET.md)); Isolation Forest fitted ([guide](docs/M3_MODEL.md)); threshold calibrated and compared with the rules on a held-out session ([results](docs/experiments/2026-10-14-m3-first-evaluation.md)); next is a labeled synthetic sweep |
 | M4: reliable release | Not started |
 
 The detailed tracker and the next concrete steps are in [project plan §21](docs/PROJECT_PLAN.md#21-current-status-and-how-to-resume).
@@ -60,6 +60,7 @@ See the [M2 guide](docs/M2_POSTGRES.md) to load the real capture, run the API at
 | [M2 guide](docs/M2_POSTGRES.md) | Load results into Postgres; API, dashboard, and trace |
 | [M3 dataset](docs/M3_DATASET.md) | How the train/calibration/test split is built and verified |
 | [M3 model](docs/M3_MODEL.md) | The Isolation Forest: what it does, how it is trained, and its limits |
+| [M3 evaluation](docs/M3_EVALUATION.md) | Alert-budget thresholds and comparing the model with the rules |
 | [Review rubric](docs/PHASE1_REVIEW_RUBRIC.md) | Review flagged rows without over-claiming |
 | [Experiments](docs/experiments/) | Dated measurements and evidence behind each claim |
 | [CLAUDE.md](CLAUDE.md) | Working conventions for AI-assisted sessions |

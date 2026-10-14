@@ -114,6 +114,12 @@ def main(argv: list[str] | None = None) -> int:
     train.add_argument("--seed", type=int, default=7)
     train.add_argument("--trees", type=int, default=100)
     train.add_argument("--max-train-rows", type=int, default=50_000)
+    evaluate = commands.add_parser("evaluate-iforest", help="Calibrate an alert threshold, score the test split, and compare with the rules")
+    evaluate.add_argument("manifest", type=Path)
+    evaluate.add_argument("model", type=Path, help="Model directory from train-iforest")
+    evaluate.add_argument("--root", type=Path, default=Path("data/screened"))
+    evaluate.add_argument("--alerts-per-1000", type=float, default=25.0, help="Alert budget on calibration traffic")
+    evaluate.add_argument("--output", type=Path, help="New directory; default data/evaluations/<model name>-budget<N>")
     args = parser.parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
@@ -249,6 +255,15 @@ def main(argv: list[str] | None = None) -> int:
             output = args.output or Path("data/models") / f"iforest-{manifest['manifest_id'][:12]}-seed{args.seed}"
             summary = train_isolation_forest(manifest, args.root, output, seed=args.seed, n_estimators=args.trees,
                                              max_train_rows=args.max_train_rows)
+            code = 0
+        elif args.command == "evaluate-iforest":
+            try:
+                from blockpulse.evaluate import evaluate_detector
+            except ImportError as error:
+                raise RuntimeError('scikit-learn is not installed; run: pip install -e ".[ml]"') from error
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            output = args.output or Path("data/evaluations") / f"{args.model.name}-budget{args.alerts_per_1000:g}"
+            summary = evaluate_detector(manifest, args.root, args.model, output, alerts_per_1000=args.alerts_per_1000)
             code = 0
         elif args.command == "kafka-init":
             output = None
