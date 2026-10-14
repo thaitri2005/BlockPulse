@@ -11,7 +11,7 @@ A flag means *unusual structure*. It is not a fraud probability or evidence of w
 | M0: validate the source | ✅ Done: ten-minute live capture, replay is byte-identical |
 | M1: Kafka ingest, archive, replay | ✅ Done locally. Open item: live `capture-kafka` smoke test from your own shell |
 | M2: features, baseline, API | ✅ Done locally: Postgres store, read-only API, Grafana dashboard, `trace` ([guide](docs/M2_POSTGRES.md)) |
-| M3: ML comparison | **Next.** Needs several days of recorded data; only 10 minutes exist so far |
+| M3: ML comparison | 🔄 In progress: dataset manifest and chronological split done ([guide](docs/M3_DATASET.md)); next is the Isolation Forest |
 | M4: reliable release | Not started |
 
 The detailed tracker and the next concrete steps are in [project plan §21](docs/PROJECT_PLAN.md#21-current-status-and-how-to-resume).
@@ -58,6 +58,7 @@ See the [M2 guide](docs/M2_POSTGRES.md) to load the real capture, run the API at
 | [Phase 1](docs/PHASE1.md) (M2.0) | The structural rules, the synthetic lab, and how to read flags |
 | [M1 Kafka guide](docs/M1_KAFKA.md) | Run the Kafka pipeline end to end |
 | [M2 guide](docs/M2_POSTGRES.md) | Load results into Postgres; API, dashboard, and trace |
+| [M3 dataset](docs/M3_DATASET.md) | How the train/calibration/test split is built and verified |
 | [Review rubric](docs/PHASE1_REVIEW_RUBRIC.md) | Review flagged rows without over-claiming |
 | [Experiments](docs/experiments/) | Dated measurements and evidence behind each claim |
 | [CLAUDE.md](CLAUDE.md) | Working conventions for AI-assisted sessions |

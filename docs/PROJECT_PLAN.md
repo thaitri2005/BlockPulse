@@ -2,9 +2,9 @@
 
 | Document field | Value |
 | --- | --- |
-| Status | M0, M1, and M2 complete locally; M3 (ML comparison and evaluation) is next and needs more recorded data |
-| Version | 1.3 |
-| Created / last updated | 2026-10-08 / 2026-10-12 |
+| Status | M0, M1, and M2 complete locally; M3 (ML comparison and evaluation) in progress, started with the dataset manifest |
+| Version | 1.4 |
+| Created / last updated | 2026-10-08 / 2026-10-14 |
 | Intended builder | One developer working part-time |
 | Primary environment | Local machine; containers before Kubernetes |
 | Hardware (measured 2026-10-09) | Intel i5-1340P (12 cores / 16 threads), 15.6 GiB RAM, ~66 GiB free on D:; Windows 11 + Docker Desktop |
@@ -809,6 +809,17 @@ A streaming feature/score worker (Kafka `features`/`scored` topics) is optional 
 
 **Done when:** another run can reconstruct the evaluation from manifests and versions, and the selected detector is justified by evidence. Keeping the baseline as champion is an acceptable outcome.
 
+Suggested steps, one session each:
+
+| Step | Task | Status |
+| --- | --- | --- |
+| M3.1 | Dataset manifest and chronological split by session, with checksums | Done 2026-10-14; see [M3 dataset](M3_DATASET.md) |
+| M3.2 | Fit an Isolation Forest on the train split (bounded size, fixed seed); record fit time and peak memory | **Next** (adds scikit-learn; confirm first) |
+| M3.3 | Calibrate a threshold on the calibration split for a stated alerts-per-1,000 budget; score the test split; compare flags with the rules | Not started |
+| M3.4 | Structural injection sweep and benign controls (labeled synthetic fixtures, kept out of training) | Not started |
+| M3.5 | Model artifact with metadata (feature hash, seed, dataset manifest ID), compatibility check, rollback; MLflow only if it earns its place | Not started |
+| M3.6 | Evaluation report: what is supported, what is not | Not started |
+
 ### M4 — Reliability and a complete local release
 
 **Estimate:** 20-30 hours. **Depends on:** M3.
@@ -967,7 +978,7 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 | M0: source and hardware validation | Complete (bounded local prototype) | [Connectivity](experiments/2026-10-08-source-connectivity.md) and [validation](experiments/2026-10-09-phase0-phase1-validation.md): ten-minute capture with 402 messages and 6,983 events; all four lifecycle types; byte-identical replay; host snapshot; reconnect gaps recorded |
 | M1: ingest/archive/replay | Complete (local) | [M1 guide](M1_KAFKA.md): capture-to-Kafka, saved-data replay, bounded REST enrichment, JSONL + Parquet archives, restart safety; 402-message replay reproduced 2,732 features exactly. **Open:** live `capture-kafka` from the user's own shell (the agent runtime was blocked from the public WebSocket) |
 | M2: features/baseline/API | Complete (local) | [M2 guide](M2_POSTGRES.md): Postgres store with duplicate-safe loads, lifecycle projection, read-only API, Grafana dashboard, `trace` command, offline demo script. Real capture reproduced exactly: 2,732 scores (73 flagged), 6,983 events, 6,259 transactions. **Not done from the M2 list:** a streaming feature/score worker (offline path only), `source_gaps`/`evaluation_runs`/`alerts` tables, and labeled evaluation (M3) |
-| M3: ML/evaluation | Not started | Depends on M2 and several days of recorded data |
+| M3: ML/evaluation | In progress | M3.1 done: [dataset manifest](M3_DATASET.md) over 15,515 rows from 5 sessions (train 8,186 / calibration 5,021 / test 2,308). Calibration and test are single 10-minute windows, so early results are pipeline checks only. Next: M3.2 Isolation Forest |
 | M4: reliable local release | Not started | Depends on M3 |
 | E1: entity analysis | Deferred | Optional; gate on data coverage and memory |
 | E2: Kubernetes/networking | Deferred | Optional; gate on completed local core |
@@ -977,10 +988,10 @@ Test suite on 2026-10-12: 78 passed with `BLOCKPULSE_TEST_DSN` set (65 passed an
 
 **Next session, in order:**
 
-1. **Live smoke test (about 5 minutes).** From your own PowerShell, start Kafka and run a 60-second `capture-kafka` (commands in the [M1 guide](M1_KAFKA.md)). It closes the one open M1 item.
-2. **Start collecting data for M3.** M3 compares detectors on chronological splits and wants several days of traffic, but only 10 minutes exist. Decide a bounded daily capture routine (for example 10 minutes a day at about 12 MiB each) and keep a log of dates; do not run an unbounded capture.
-3. **Catch-up walkthrough.** Code from M1 and M2 has no guided explanation yet. Use the [learning path](learning/README.md) to go through it.
-4. **M3 groundwork** once there are a few days of data: dataset manifests and a temporal split, then the labeled structural-injection fixtures and the review rubric into an evaluation report.
+1. **M3.2: Isolation Forest.** Fit it on the train split. This adds scikit-learn as a dependency; confirm that first (CLAUDE.md asks before adding dependencies).
+2. **Keep collecting.** Run `scripts/capture_session.ps1` about once a day, ideally including a midday UTC and a weekend session. Rebuild the manifest with `build-dataset` when new sessions exist and keep the old manifest file; an evaluation is tied to the manifest it used.
+3. **Live Kafka smoke test (about 5 minutes).** Run a 60-second `capture-kafka` from your own shell ([M1 guide](M1_KAFKA.md)). It closes the one open M1 item.
+4. **Catch-up walkthrough.** M1 and M2 code has no guided explanation yet; see the [learning path](learning/README.md).
 
 **Housekeeping:** Kafka (up to 1 GiB), Postgres (512 MB), and Grafana (384 MB) are separate Compose profiles. Stop what you aren't using (`docker compose --profile m1 stop`, `docker compose --profile m2 stop`); data volumes persist.
 
@@ -1023,6 +1034,7 @@ Resources still running, if any:
 | 2026-10-09 | 0.8 | Started M1 with a pinned local Kafka broker profile, capture replay producer, restart-safe JSONL archive consumer, and broker-independent tests |
 | 2026-10-09 | 0.9 | Verified the 402-message raw Kafka round trip, exact processed feature/event records, and repeat-consumer behavior |
 | 2026-10-09 | 1.0 | Completed capture-to-Kafka, bounded enrichment, error topic, Zstandard Parquet archival, offset-safe restart behavior, throughput/lag summaries, and the full M1 local integration (62 passed, 1 skipped) |
+| 2026-10-14 | 1.4 | Started M3: dataset manifests with a deterministic chronological split by session, checksums, capture-quality provenance, and exclusion reasons; added a capture session script and its log |
 | 2026-10-12 | 1.3 | Completed M2: duplicate-safe score and lifecycle loads, evidence-based status projection, read-only API, provisioned Grafana dashboard, transaction trace with replay check, offline demo script, and an end-to-end test |
 | 2026-10-12 | 1.2 | M2.1: added a Postgres Compose profile, migration runner (`db-init`), and the first `transactions`/`scores` tables with a duplicate-rejecting unique key |
 | 2026-10-12 | 1.1 | Documentation review: reconciled phase/milestone naming, recorded as-built differences (topics, keys, retention, Parquet layout), split M2 into small steps, refreshed the tracker and next steps, added a learning path and working notes |

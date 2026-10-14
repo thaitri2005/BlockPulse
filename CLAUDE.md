@@ -19,7 +19,7 @@ The project owner is learning streaming data engineering while building this. Op
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # 65 passed, 14 skipped; with BLOCKPULSE_TEST_DSN set (see docs/M2_POSTGRES.md): 78 passed, 1 skipped
+.\.venv\Scripts\python.exe -m pytest -q          # 68 passed, 14 skipped; with BLOCKPULSE_TEST_DSN set (see docs/M2_POSTGRES.md): 81 passed, 1 skipped
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
 docker compose --profile m2 up -d --wait          # Postgres + Grafana (~900 MB); `stop` when done

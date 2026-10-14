@@ -103,6 +103,10 @@ def main(argv: list[str] | None = None) -> int:
     trace.add_argument("txid")
     trace.add_argument("--capture", type=Path, help="The messages.jsonl the data was loaded from")
     trace.add_argument("--brief", action="store_true", help="Print a short human summary instead of the full JSON")
+    build_dataset = commands.add_parser("build-dataset", help="Build a checksummed chronological train/calibration/test manifest from screened sessions")
+    build_dataset.add_argument("--root", type=Path, default=Path("data/screened"), help="Directory of screened run folders")
+    build_dataset.add_argument("--output", type=Path, help="Manifest path; default data/datasets/dataset-<id>.json")
+    build_dataset.add_argument("--min-rows", type=int, default=100, help="Exclude sessions with fewer rows")
     args = parser.parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
@@ -220,6 +224,15 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(json.dumps(summary, indent=2, default=str))
             return 0 if check is None or check["matches_stored_features"] is not False else 4
+        elif args.command == "build-dataset":
+            from blockpulse.dataset import build_manifest, write_manifest
+            output = None
+            manifest = build_manifest(args.root, min_rows=args.min_rows)
+            path = args.output or Path("data/datasets") / f"dataset-{manifest['manifest_id'][:12]}.json"
+            created = write_manifest(manifest, path)
+            summary = {"manifest": str(path), "created": created, "manifest_id": manifest["manifest_id"],
+                       "splits": manifest["splits"], "excluded": manifest["excluded"]}
+            code = 0
         elif args.command == "kafka-init":
             output = None
             summary = _kafka_call("Kafka topic initialization", lambda: create_m1_topics(args.bootstrap_servers))

@@ -25,6 +25,7 @@ Each exercise is sized for one sitting of about 30-60 minutes. Stop when a conce
 | 9 | Evidence versus projection | Lifecycle events, order-independent status, why late data can't roll status back | `lifecycle.py` → `PROJECT`; `tests/test_lifecycle.py` | To write together |
 | 10 | A read-only API and a dashboard | Keyset pagination, input validation, read-only connections, SQL panels | `api.py` → `list_alerts()`; `observability/grafana/dashboards/` | To write together |
 | 11 | Tracing one transaction end to end | Provenance, replay check, why raw data is kept | `trace.py`; run `scripts/demo_m2.ps1` first | To write together |
+| 12 | Honest evaluation: splits, leakage, manifests | Chronological splits, why whole sessions, checksums, what a split can and cannot prove | `dataset.py` → `choose_cuts()`, `load_split()`; [M3 dataset](../M3_DATASET.md) | To write together |
 
 ## Exercise outlines
 
