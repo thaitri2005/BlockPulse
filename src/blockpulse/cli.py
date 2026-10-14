@@ -107,6 +107,13 @@ def main(argv: list[str] | None = None) -> int:
     build_dataset.add_argument("--root", type=Path, default=Path("data/screened"), help="Directory of screened run folders")
     build_dataset.add_argument("--output", type=Path, help="Manifest path; default data/datasets/dataset-<id>.json")
     build_dataset.add_argument("--min-rows", type=int, default=100, help="Exclude sessions with fewer rows")
+    train = commands.add_parser("train-iforest", help="Fit an Isolation Forest on a dataset manifest's train split")
+    train.add_argument("manifest", type=Path, help="Manifest from build-dataset")
+    train.add_argument("--root", type=Path, default=Path("data/screened"))
+    train.add_argument("--output", type=Path, help="New model directory; default data/models/iforest-<manifest id>-seed<seed>")
+    train.add_argument("--seed", type=int, default=7)
+    train.add_argument("--trees", type=int, default=100)
+    train.add_argument("--max-train-rows", type=int, default=50_000)
     args = parser.parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
@@ -232,6 +239,16 @@ def main(argv: list[str] | None = None) -> int:
             created = write_manifest(manifest, path)
             summary = {"manifest": str(path), "created": created, "manifest_id": manifest["manifest_id"],
                        "splits": manifest["splits"], "excluded": manifest["excluded"]}
+            code = 0
+        elif args.command == "train-iforest":
+            try:
+                from blockpulse.model import train_isolation_forest
+            except ImportError as error:
+                raise RuntimeError('scikit-learn is not installed; run: pip install -e ".[ml]"') from error
+            manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+            output = args.output or Path("data/models") / f"iforest-{manifest['manifest_id'][:12]}-seed{args.seed}"
+            summary = train_isolation_forest(manifest, args.root, output, seed=args.seed, n_estimators=args.trees,
+                                             max_train_rows=args.max_train_rows)
             code = 0
         elif args.command == "kafka-init":
             output = None

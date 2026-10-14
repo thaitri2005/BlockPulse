@@ -46,6 +46,7 @@ Kafka consumers use a group ID to remember their progress. Reuse the same group 
 | `lifecycle.py` | 111 | Lifecycle evidence load and status projection (`load-events`) |
 | `api.py` | 176 | Read-only FastAPI app (`serve`) |
 | `trace.py` | 62 | Stored record to raw capture line, with a feature recomputation check |
+| `model.py` | ~150 | Isolation Forest training, feature transforms, checksummed save/load (`train-iforest`); needs the `ml` extra |
 | `dataset.py` | ~190 | Checksummed chronological train/calibration/test manifest (`build-dataset`) and verified split loading |
 
 Kafka topics: `blockpulse.raw.v1`, `blockpulse.enriched.v1`, `blockpulse.errors.v1`. Each has 3 partitions and 7-day retention, and records are keyed by capture session ID.

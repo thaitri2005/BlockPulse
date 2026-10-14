@@ -26,6 +26,7 @@ Each exercise is sized for one sitting of about 30-60 minutes. Stop when a conce
 | 10 | A read-only API and a dashboard | Keyset pagination, input validation, read-only connections, SQL panels | `api.py` → `list_alerts()`; `observability/grafana/dashboards/` | To write together |
 | 11 | Tracing one transaction end to end | Provenance, replay check, why raw data is kept | `trace.py`; run `scripts/demo_m2.ps1` first | To write together |
 | 12 | Honest evaluation: splits, leakage, manifests | Chronological splits, why whole sessions, checksums, what a split can and cannot prove | `dataset.py` → `choose_cuts()`, `load_split()`; [M3 dataset](../M3_DATASET.md) | To write together |
+| 13 | What an Isolation Forest can and can't see | Unsupervised anomaly scores, log transforms, no extrapolation, in-sample scores | `model.py` → `feature_matrix()`, `train_isolation_forest()`; [M3 model](../M3_MODEL.md) | To write together |
 
 ## Exercise outlines
 
