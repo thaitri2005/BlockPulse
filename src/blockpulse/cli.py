@@ -127,6 +127,24 @@ def main(argv: list[str] | None = None) -> int:
     sweep.add_argument("--root", type=Path, default=Path("data/screened"))
     sweep.add_argument("--seed", type=int, default=11)
     sweep.add_argument("--output", type=Path, help="New directory; default data/sweeps/<evaluation name>-seed<N>")
+    detectors = commands.add_parser("detectors", help="Package, register, promote, and roll back detector bundles")
+    detectors.add_argument("--root", type=Path, default=Path("data/detectors"))
+    actions = detectors.add_subparsers(dest="action", required=True)
+    pkg_rules = actions.add_parser("package-rules", help="Bundle and register the rule baseline")
+    pkg_rules.add_argument("--many-outputs-min", type=int, default=10)
+    pkg_rules.add_argument("--many-inputs-min", type=int, default=10)
+    pkg_model = actions.add_parser("package-model", help="Bundle and register a trained, calibrated, swept model")
+    pkg_model.add_argument("manifest", type=Path)
+    pkg_model.add_argument("model", type=Path)
+    pkg_model.add_argument("evaluation", type=Path)
+    pkg_model.add_argument("sweep", type=Path)
+    pkg_model.add_argument("--screened-root", type=Path, default=Path("data/screened"))
+    promote_cmd = actions.add_parser("promote", help="Make a registered detector the champion if it passes its gate")
+    promote_cmd.add_argument("detector_id")
+    promote_cmd.add_argument("--reason", required=True)
+    rollback_cmd = actions.add_parser("rollback", help="Return to the previous champion")
+    rollback_cmd.add_argument("--reason", required=True)
+    actions.add_parser("status", help="Show registered detectors, the champion, and recent events")
     args = parser.parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
@@ -281,6 +299,30 @@ def main(argv: list[str] | None = None) -> int:
             output = args.output or Path("data/sweeps") / f"{args.evaluation.name}-seed{args.seed}"
             summary = run_sweep(manifest, args.root, args.model, args.evaluation, output, seed=args.seed)
             code = 0
+        elif args.command == "detectors":
+            from blockpulse import registry
+            from blockpulse.detector import DetectorConfig
+            output = None
+            args.root.mkdir(parents=True, exist_ok=True)
+            code = 0
+            if args.action == "package-rules":
+                config = DetectorConfig(many_outputs_min=args.many_outputs_min, many_inputs_min=args.many_inputs_min)
+                directory = registry.package_rules(args.root, config)
+                summary = {"bundle": str(directory), "registered": registry.register(args.root, directory)}
+            elif args.action == "package-model":
+                manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+                directory = registry.package_model(manifest, args.screened_root, args.model, args.evaluation, args.sweep, args.root)
+                summary = {"bundle": str(directory), "registered": registry.register(args.root, directory)}
+            elif args.action == "promote":
+                summary = registry.promote(args.root, args.detector_id, args.reason)
+                code = 0 if summary["promoted"] or summary.get("note") else 4
+            elif args.action == "rollback":
+                summary = registry.rollback(args.root, args.reason)
+            else:
+                events = registry.read_events(args.root)
+                current = registry.state(events)
+                summary = {"champion": current["champion"], "previous_champions": current["previous_champions"],
+                           "registered": {k: v["family"] for k, v in current["registered"].items()}, "recent_events": events[-8:]}
         elif args.command == "kafka-init":
             output = None
             summary = _kafka_call("Kafka topic initialization", lambda: create_m1_topics(args.bootstrap_servers))

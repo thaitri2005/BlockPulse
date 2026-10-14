@@ -11,8 +11,8 @@ A flag means *unusual structure*. It is not a fraud probability or evidence of w
 | M0: validate the source | ✅ Done: ten-minute live capture, replay is byte-identical |
 | M1: Kafka ingest, archive, replay | ✅ Done locally. Open item: live `capture-kafka` smoke test from your own shell |
 | M2: features, baseline, API | ✅ Done locally: Postgres store, read-only API, Grafana dashboard, `trace` ([guide](docs/M2_POSTGRES.md)) |
-| M3: ML comparison | 🔄 In progress: dataset manifest and chronological split done ([guide](docs/M3_DATASET.md)); Isolation Forest fitted ([guide](docs/M3_MODEL.md)); threshold calibrated and compared with the rules on a held-out session ([results](docs/experiments/2026-10-14-m3-first-evaluation.md)); labeled synthetic sweep done ([results](docs/experiments/2026-10-14-m3-synthetic-sweep.md)); next is packaging the model artifact |
-| M4: reliable release | Not started |
+| M3: ML comparison | ✅ Done locally ([report](docs/M3_REPORT.md)): the rules stay champion; the Isolation Forest is a registered challenger that failed the promotion gate |
+| M4: reliable release | **Next** |
 
 The detailed tracker and the next concrete steps are in [project plan §21](docs/PROJECT_PLAN.md#21-current-status-and-how-to-resume).
 
@@ -61,6 +61,8 @@ See the [M2 guide](docs/M2_POSTGRES.md) to load the real capture, run the API at
 | [M3 dataset](docs/M3_DATASET.md) | How the train/calibration/test split is built and verified |
 | [M3 model](docs/M3_MODEL.md) | The Isolation Forest: what it does, how it is trained, and its limits |
 | [M3 evaluation](docs/M3_EVALUATION.md) | Alert-budget thresholds and comparing the model with the rules |
+| [M3 registry](docs/M3_REGISTRY.md) | Detector bundles, promotion gate, and rollback |
+| [M3 report](docs/M3_REPORT.md) | What the evidence supports and the champion decision |
 | [Review rubric](docs/PHASE1_REVIEW_RUBRIC.md) | Review flagged rows without over-claiming |
 | [Experiments](docs/experiments/) | Dated measurements and evidence behind each claim |
 | [CLAUDE.md](CLAUDE.md) | Working conventions for AI-assisted sessions |

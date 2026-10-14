@@ -19,11 +19,13 @@ The project owner is learning streaming data engineering while building this. Op
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # 76 passed, 14 skipped; with BLOCKPULSE_TEST_DSN set (see docs/M2_POSTGRES.md): 89 passed, 1 skipped
+.\.venv\Scripts\python.exe -m pytest -q          # 81 passed, 14 skipped; with BLOCKPULSE_TEST_DSN set (see docs/M2_POSTGRES.md): 94 passed, 1 skipped
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
 docker compose --profile m2 up -d --wait          # Postgres + Grafana (~900 MB); `stop` when done
 ```
+
+Rebuild the whole M3 chain and compare with the recorded artifacts: `powershell -File scripts/reproduce_m3.ps1`. The champion detector is in `data/detectors/registry.jsonl` (`blockpulse detectors status`); the rules are champion until a model clears the gate.
 
 The live WebSocket needs `--url wss://node203.sv1.mempool.space/api/v1/ws`, because the default host times out from this network. The agent runtime may be blocked from public WebSockets entirely; ask the user to run live captures from their own shell.
 
