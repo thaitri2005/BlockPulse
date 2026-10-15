@@ -19,7 +19,7 @@ The project owner is learning streaming data engineering while building this. Op
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # 81 passed, 14 skipped; with BLOCKPULSE_TEST_DSN set (see docs/M2_POSTGRES.md): 94 passed, 1 skipped
+.\.venv\Scripts\python.exe -m pytest -q          # 94 passed, 15 skipped; with BLOCKPULSE_TEST_DSN set (see docs/M2_POSTGRES.md): 108 passed, 1 skipped
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
 docker compose --profile m2 up -d --wait          # Postgres + Grafana (~900 MB); `stop` when done
@@ -27,11 +27,22 @@ docker compose --profile m2 up -d --wait          # Postgres + Grafana (~900 MB)
 
 Rebuild the whole M3 chain and compare with the recorded artifacts: `powershell -File scripts/reproduce_m3.ps1`. The champion detector is in `data/detectors/registry.jsonl` (`blockpulse detectors status`); the rules are champion until a model clears the gate.
 
-Unattended collection: `scripts/install_collector.ps1` (hourly Task Scheduler job; see docs/M4_COLLECTION.md). The Airflow DAG in `orchestration/airflow/` has never been run.
+Unattended collection uses one implementation (`blockpulse collect-loop`, `process-pending`, `sync-pending` in `collector.py`) for the laptop task, Airflow (never run) and AWS. See docs/M4_COLLECTION.md and docs/AWS_DEPLOY.md.
+
+Infrastructure checks (no AWS account needed):
+
+```powershell
+cd infra/aws/terraform; terraform fmt -check -recursive; terraform validate; terraform test   # mocked provider
+bash infra/aws/tests/run_container_tests.sh       # from the repo root: Amazon Linux 2023 + systemd rehearsals (Docker)
+.\.venv\Scripts\shellcheck.exe infra/aws/instance/*.sh infra/aws/tests/*.sh
+```
 
 The live WebSocket needs `--url wss://node203.sv1.mempool.space/api/v1/ws`, because the default host times out from this network. The agent runtime may be blocked from public WebSockets entirely; ask the user to run live captures from their own shell.
 
 ## Conventions
+
+- **Never run `terraform apply` or `destroy`, or create anything in AWS, from an agent session.** Prepare and test; the owner deploys (decision D17).
+- Files that run on Linux (`*.sh`, systemd units, `*.tf`, templates) must have LF line endings. Python's `write_text` on Windows writes CRLF unless you pass `newline="\n"`; `.gitattributes` and the bundle builder guard against it.
 
 - `data/` is git-ignored local evidence. Never delete or overwrite run directories; commands create new ones.
 - Tests must not hit the public API. Postgres tests drop the `public` schema: only ever point `BLOCKPULSE_TEST_DSN` at `blockpulse_test`.

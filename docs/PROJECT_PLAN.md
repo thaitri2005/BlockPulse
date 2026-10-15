@@ -2,13 +2,13 @@
 
 | Document field | Value |
 | --- | --- |
-| Status | M0, M1, M2, and M3 complete locally; M4 (reliable local release) is next |
-| Version | 1.9 |
-| Created / last updated | 2026-10-08 / 2026-10-14 |
+| Status | M0-M3 complete locally; AWS data collector (E3a) ready to deploy; M4 (reliable local release) next |
+| Version | 2.0 |
+| Created / last updated | 2026-10-08 / 2026-10-15 |
 | Intended builder | One developer working part-time |
 | Primary environment | Local machine; containers before Kubernetes |
 | Hardware (measured 2026-10-09) | Intel i5-1340P (12 cores / 16 threads), 15.6 GiB RAM, ~66 GiB free on D:; Windows 11 + Docker Desktop |
-| Cloud posture | Optional, temporary experiments; no always-on cloud environment |
+| Cloud posture | Optional, temporary experiments; no always-on cloud environment. A self-expiring AWS collector is ready ([AWS_DEPLOY.md](AWS_DEPLOY.md)) |
 | Origin | The supplied Bitcoin anomaly pipeline discussion and system-design draft |
 | Role of this document | Canonical reference for the idea, design, scope, implementation sequence, and progress |
 
@@ -624,6 +624,8 @@ For the private profile, keep application/data ingress restricted to relevant se
 
 Terraform should create tagged experiment resources, record region and expiry time, and provide a teardown inventory. Keep backend/bootstrap resources identified separately. No ALB, public domain, RDS, ElastiCache, or MSK is needed for the default experiment.
 
+**As built (2026-10-15): the data collector, E3a.** [`infra/aws/terraform/`](../infra/aws/terraform/) creates one t4g.small Amazon Linux 2023 instance in a dedicated VPC with one public subnet and an internet gateway (no NAT), a security group with no inbound rules and outbound TCP 443 only, IMDSv2, an encrypted gp3 disk, Session Manager access, a least-privilege instance role, a private TLS-only S3 bucket with 30-day expiry, and an optional budget alert. It runs the collector as hardened systemd services (capture loop, 10-minute process-and-upload timer, deadline poweroff), not Compose: the job needs no other services. The deadline is fixed at creation and tagged `ExpiresAt`. Local state; no remote backend, since one person runs one short experiment. Verified offline only: `terraform test` with a mocked provider, and the bootstrap plus real systemd units in Amazon Linux 2023 containers. Not yet applied to a real account. Runbook, costs and verification table: [AWS_DEPLOY.md](AWS_DEPLOY.md).
+
 ### 13.5 Security baseline
 
 Use non-root application containers, pinned dependencies, minimal credentials, and a basic image/dependency scan. Avoid public exposure of databases, Kafka, dashboards, or the model registry. Keep model artifacts under project control and verify provenance before loading them.
@@ -726,6 +728,19 @@ For context, the EKS pricing page checked on 2026-10-08 lists standard-support c
 NAT, public IPv4, interface endpoints, and data transfer can materially change a small experiment's bill. AWS documents no hourly or data-processing charge for S3 gateway endpoints; the surrounding services can still be billable. [Source: VPC pricing](https://aws.amazon.com/vpc/pricing/).
 
 Keep a cost worksheet with region, service/SKU, quantity, unit rate, planned hours, estimate, pricing date, and actual billed cost. Do not rely on free-tier eligibility or credits unless verified for the account.
+
+**Worksheet: AWS data collector (E3a), us-west-2, 96 hours, prices checked 2026-10-15 from secondary sources.**
+
+| Service / SKU | Quantity | Unit rate | Estimate | Actual |
+| --- | --- | --- | ---: | ---: |
+| EC2 t4g.small on-demand | 96 h | $0.0168/h | $1.61 | (record after run) |
+| Public IPv4 | 96 h | $0.005/h | $0.48 | |
+| EBS gp3 | 40 GB for 96 h | about $0.08/GB-month | $0.42 | |
+| S3 storage and requests | up to about 20 GB, a few thousand PUTs | $0.023/GB-month | about $0.10 | |
+| Data transfer out (download) | about 20 GB | first 100 GB/month free | $0 to $1.80 | |
+| **Total** | | | **about $2.60 to $4.40** | |
+
+Well inside the $15 aim. After the deadline the stopped instance's disk and the bucket keep billing (about $3.20/month for the disk) until `terraform destroy`.
 
 ### 15.3 Operational controls and teardown
 
@@ -854,6 +869,8 @@ Deploy the reduced stack, verify policies, inject network faults, and replay eno
 
 Provision the chosen small profile, run one bounded experiment, collect measurements, tear it down, and record actual expense. Done includes teardown verification and billing review. A larger managed-service comparison is a separate extension.
 
+**E3a, pulled forward (2026-10-15):** the first AWS experiment is the data collector for the M3 rerun ([decision D16](#19-decision-register)). Status: built and verified offline (Terraform tests, Amazon Linux 2023 container rehearsals, CI configured); waiting for the owner to deploy. Done when it has run, the data is downloaded, everything is destroyed, and the actual cost is in the worksheet in Section 15.2.
+
 ## 17. Verification and definition of done
 
 ### 17.1 Tests that protect the design
@@ -875,6 +892,8 @@ Use exact equality for integer/categorical features. For floating-point output, 
 
 Start CI with formatting, lint/type checks, unit/contract tests, and a bounded integration/equivalence suite. Add container scanning and image publication when deployment exists. Multi-architecture builds and repeated long benchmarks are not required on every commit.
 
+**As built (2026-10-15):** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs three jobs on every push and pull request: pytest with a Postgres service container (so the database tests run too), Terraform `fmt`/`validate`/`test` with the mocked AWS provider, and shellcheck plus both Amazon Linux 2023 container rehearsals. It has not run on GitHub yet; the same checks pass locally. Lint and type checks are not in CI yet.
+
 ### 17.2 Core release checklist
 
 - [ ] Fresh local setup works from documented prerequisites.
@@ -892,7 +911,29 @@ Start CI with formatting, lint/type checks, unit/contract tests, and a bounded i
 
 ## 18. Proposed repository organization
 
-This tree is a target structure for later phases. **As built**, `src/blockpulse/` is still flat: `capture.py`, `events.py`, `features.py`, `process.py`, `storage.py`, `detector.py`, `detect.py`, `lab.py`, `kafka_pipeline.py`, `kafka_workers.py`, `enrichment.py`, `parquet_archive.py`, and `cli.py`. [Current architecture](ARCHITECTURE_CURRENT.md) maps each one. `compose.yaml` sits at the repository root. Split into sub-packages once a module grows past easy reading, not in advance.
+This tree is a target structure for later phases. **As built (2026-10-15)**, the layout is:
+
+```text
+BlockPulse/
+  README.md  CLAUDE.md  compose.yaml  pyproject.toml
+  .github/workflows/ci.yml        # tests, Terraform checks, container rehearsals
+  docs/                           # plan, architecture, milestone guides, AWS runbook, experiments/, learning/
+  src/blockpulse/                 # flat package: capture, process, features, rules, Kafka, Postgres, API, ML, collector
+    migrations/                   # forward-only SQL
+  tests/                          # pytest (offline; Postgres tests opt in with BLOCKPULSE_TEST_DSN)
+  infra/aws/
+    terraform/                    # the AWS collector stack, with offline tests in tests/
+    instance/                     # install.sh, deadline-check.sh, systemd/ units
+    tests/                        # Amazon Linux 2023 container rehearsals
+    build_bundle.py               # reproducible app bundle for the instance
+  orchestration/airflow/          # optional DAG and image (unverified)
+  observability/grafana/          # provisioned datasource and dashboard
+  scripts/                        # laptop collection, demo, M3 reproduction
+  examples/                       # learning exercise and synthetic fixtures
+  data/                           # ignored local datasets and artifacts
+```
+
+[Current architecture](ARCHITECTURE_CURRENT.md) maps every module. Split the flat package into sub-packages once a module grows past easy reading, not in advance. The target tree below remains the longer-term shape.
 
 ```text
 BlockPulse/
@@ -948,8 +989,10 @@ These are proposed defaults for the first implementation. Change them when evide
 | D11 | Core completion precedes Kubernetes/cloud | Ensure infrastructure expands a working project |
 | D12 | Cloud runs are temporary | Learn deployment and cost without a recurring hosting commitment |
 | D13 | The rule baseline stays champion until a model clears a recorded promotion gate | Decided 2026-10-14 ([M3 report](M3_REPORT.md)); revisit with more data, labels, or a better model |
-| D15 | Unattended collection runs hourly via Windows Task Scheduler; Airflow is optional | Decided 2026-10-15: same steps, no extra RAM, no image download. The Airflow DAG exists but is unverified ([collection](M4_COLLECTION.md)) |
 | D14 | Local append-only detector registry instead of MLflow | Same register/promote/rollback operations without another service; revisit with several models or collaborators |
+| D15 | One collector implementation (`collect-loop`, `process-pending`, `sync-pending`) shared by every runner | Decided 2026-10-15: the laptop task, Airflow and AWS differ only in scheduling, so behavior and tests are shared. Airflow is optional and unverified ([collection](M4_COLLECTION.md)) |
+| D16 | Pull a minimal AWS run (E3a) ahead of M4 to collect data | Decided 2026-10-15: the M3 rerun needs days of continuous data, which a laptop can't reliably provide. Smallest profile: one instance, no NAT, systemd instead of Compose, self-expiring, about $3 ([AWS_DEPLOY.md](AWS_DEPLOY.md)) |
+| D17 | Infrastructure is tested offline before any deploy | Terraform tests with mocked providers and container rehearsals of the instance run locally and in CI; nothing is applied to a real account from an automated session |
 
 When a choice becomes implementation-critical, add a short decision note with context, alternatives, chosen behavior, consequences, and evidence. Keep superseded notes for history; update this document to show the current choice.
 
@@ -967,6 +1010,8 @@ When a choice becomes implementation-critical, add a short decision note with co
 | Stateful replay is too complex | Isolate it behind the core release | Stop at transaction-level features |
 | Too many services slow delivery | Review milestone scope before adding services | Turn off optional profiles; consolidate application workers |
 | Cloud quote exceeds the envelope | Price the selected profile | Shorten the run, simplify it, or skip cloud |
+| A cloud run is forgotten and keeps billing | Deadline poweroff, `ExpiresAt` tag, budget alert, 30-day bucket expiry | `terraform destroy` from the saved state; the teardown checklist in [AWS_DEPLOY.md](AWS_DEPLOY.md) |
+| The AWS instance misses something it needs (outbound HTTPS only) | Read the bootstrap log through Session Manager | Widen egress deliberately, record why, and retest |
 | Part-time schedule slips | Re-estimate at milestone boundaries | Finish the current release boundary before adding an extension |
 
 ### 20.1 Feasibility check after M3 (2026-10-15)
@@ -1003,17 +1048,17 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 | M4: reliable local release | Not started | Next. Starts with a clean pinned environment, then the live Kafka smoke test and failure experiments |
 | E1: entity analysis | Deferred | Optional; gate on data coverage and memory |
 | E2: Kubernetes/networking | Deferred | Optional; gate on completed local core |
-| E3: AWS experiment | Deferred | Optional; gate on a current costed plan |
+| E3: AWS experiment | E3a ready to deploy | Data collector built and verified offline ([AWS_DEPLOY.md](AWS_DEPLOY.md)): `terraform test` 7/7 with a mocked provider, Amazon Linux 2023 rehearsal 7/7, real systemd units pass end to end including the deadline poweroff. Not applied to a real account yet. Estimated $2.60 to $4.40 for 96 hours |
 
-Test suite on 2026-10-12: 78 passed with `BLOCKPULSE_TEST_DSN` set (65 passed and 14 skipped without it); the optional loopback test is one of the skips.
+Test suite on 2026-10-15: 108 passed and 1 skipped with `BLOCKPULSE_TEST_DSN` set (the skip is the optional loopback test); 94 passed and 15 skipped without it. Terraform: 7 passed. Container rehearsals: all passed.
 
 **Next session, in order:**
 
-1. **Keep collecting data** with `scripts/capture_session.ps1`, ideally including a midday UTC and a weekend session. Then rerun the M3 chain (`build-dataset`, `train-iforest`, `evaluate-iforest`, `sweep`, `detectors package-model`, `promote`) and compare with the 2026-10-14 results. Keep the old manifest and artifacts.
-2. **Decide an alert budget.** The 25 per 1,000 placeholder is about 750 alerts an hour on this traffic.
-3. **M4 groundwork: a clean pinned environment.** The current venv reuses system packages with a SciPy/NumPy mismatch. Rebuild it with pinned versions and rerun `scripts/reproduce_m3.ps1` to confirm results hold.
-4. **Live Kafka smoke test (about 5 minutes).** Run a 60-second `capture-kafka` from your own shell ([M1 guide](M1_KAFKA.md)); it closes the one open M1 item.
-5. **Catch-up walkthrough.** M1 to M3 code has no guided explanation yet; see the [learning path](learning/README.md).
+1. **Deploy the AWS collector** (owner): follow [AWS_DEPLOY.md](AWS_DEPLOY.md). Build the bundle, set `alert_email`, `terraform apply`, check `status.json` after about 10 minutes. Let it run for the default 96 hours, which covers a weekend if started by Thursday.
+2. **While it runs:** decide an alert budget (the 25 per 1,000 placeholder is about 750 alerts an hour), and do the catch-up walkthrough in the [learning path](learning/README.md).
+3. **After the deadline:** download, `process-pending --load-db`, rerun the M3 chain (`build-dataset`, `train-iforest`, `evaluate-iforest`, `sweep`, `detectors package-model`, `promote`) and compare with the 2026-10-14 results; then `terraform destroy` and record the actual cost.
+4. **M4 groundwork:** a clean pinned environment (the current venv reuses system packages with a SciPy/NumPy mismatch), then `scripts/reproduce_m3.ps1` to confirm results hold. Also push to GitHub so CI runs for the first time.
+5. **Live Kafka smoke test (about 5 minutes):** a 60-second `capture-kafka` from your own shell ([M1 guide](M1_KAFKA.md)) closes the one open M1 item.
 
 **Housekeeping:** Kafka (up to 1 GiB), Postgres (512 MB), and Grafana (384 MB) are separate Compose profiles. Stop what you aren't using (`docker compose --profile m1 stop`, `docker compose --profile m2 stop`); data volumes persist.
 
@@ -1056,6 +1101,7 @@ Resources still running, if any:
 | 2026-10-09 | 0.8 | Started M1 with a pinned local Kafka broker profile, capture replay producer, restart-safe JSONL archive consumer, and broker-independent tests |
 | 2026-10-09 | 0.9 | Verified the 402-message raw Kafka round trip, exact processed feature/event records, and repeat-consumer behavior |
 | 2026-10-09 | 1.0 | Completed capture-to-Kafka, bounded enrichment, error topic, Zstandard Parquet archival, offset-safe restart behavior, throughput/lag summaries, and the full M1 local integration (62 passed, 1 skipped) |
+| 2026-10-15 | 2.0 | AWS-ready: shared collector commands, Terraform stack for a self-expiring collector with offline tests, hardened systemd units, Amazon Linux 2023 container rehearsals, CI workflow, runbook and cost worksheet; decisions D15-D17; E3a pulled forward |
 | 2026-10-15 | 1.9 | Post-M3 feasibility check (section 20.1); unattended hourly collection via Windows Task Scheduler (verified on a saved capture) and an Airflow DAG with Compose service (written, not run: image download failed); disk guard and events compaction |
 | 2026-10-14 | 1.8 | Completed M3: detector bundles with reference percentiles and evidence checksums, append-only registry with promotion gate and rollback, reproduction script (6 of 6 checks), and the detection report; rules stay champion |
 | 2026-10-14 | 1.7 | M3.4: seeded, internally consistent synthetic transaction sweep (fan-in, fan-out, equal outputs, fee outliers) with benign controls; rules and calibrated model compared by pattern and severity |

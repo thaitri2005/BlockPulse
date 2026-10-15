@@ -12,6 +12,7 @@ A flag means *unusual structure*. It is not a fraud probability or evidence of w
 | M1: Kafka ingest, archive, replay | ✅ Done locally. Open item: live `capture-kafka` smoke test from your own shell |
 | M2: features, baseline, API | ✅ Done locally: Postgres store, read-only API, Grafana dashboard, `trace` ([guide](docs/M2_POSTGRES.md)) |
 | M3: ML comparison | ✅ Done locally ([report](docs/M3_REPORT.md)): the rules stay champion; the Isolation Forest is a registered challenger that failed the promotion gate |
+| AWS data collector (E3a) | ✅ Ready to deploy, about $3 for 96 hours ([runbook](docs/AWS_DEPLOY.md)); verified offline, not yet run in a real account |
 | M4: reliable release | **Next** |
 
 The detailed tracker and the next concrete steps are in [project plan §21](docs/PROJECT_PLAN.md#21-current-status-and-how-to-resume).
@@ -47,6 +48,18 @@ powershell -File scripts/demo_m2.ps1     # offline demo on synthetic data (needs
 
 See the [M2 guide](docs/M2_POSTGRES.md) to load the real capture, run the API at `http://127.0.0.1:8000/docs`, and open Grafana at `http://127.0.0.1:3000`.
 
+## Collect data unattended
+
+The same collector runs on the laptop, under Airflow, or on a small self-expiring AWS instance. For a multi-day run, AWS is the practical option:
+
+```powershell
+.\.venv\Scripts\python.exe infra\aws\build_bundle.py
+cd infra\aws\terraform; Copy-Item terraform.tfvars.example terraform.tfvars   # set alert_email
+terraform init; terraform plan -out tfplan; terraform apply tfplan
+```
+
+Everything else (checking status, downloading, tearing down) is in the [AWS runbook](docs/AWS_DEPLOY.md). Laptop and Airflow options: [collection](docs/M4_COLLECTION.md).
+
 ## Documentation map
 
 | Read this | When you want to |
@@ -63,7 +76,8 @@ See the [M2 guide](docs/M2_POSTGRES.md) to load the real capture, run the API at
 | [M3 evaluation](docs/M3_EVALUATION.md) | Alert-budget thresholds and comparing the model with the rules |
 | [M3 registry](docs/M3_REGISTRY.md) | Detector bundles, promotion gate, and rollback |
 | [M3 report](docs/M3_REPORT.md) | What the evidence supports and the champion decision |
-| [Data collection](docs/M4_COLLECTION.md) | Unattended hourly capture (Task Scheduler, optional Airflow) |
+| [Data collection](docs/M4_COLLECTION.md) | The shared collector and its three runners |
+| [AWS runbook](docs/AWS_DEPLOY.md) | Deploy, monitor, download, and tear down the AWS collector; costs; what is verified |
 | [Review rubric](docs/PHASE1_REVIEW_RUBRIC.md) | Review flagged rows without over-claiming |
 | [Experiments](docs/experiments/) | Dated measurements and evidence behind each claim |
 | [CLAUDE.md](CLAUDE.md) | Working conventions for AI-assisted sessions |

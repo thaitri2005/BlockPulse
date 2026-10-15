@@ -6,6 +6,7 @@ BlockPulse listens for Bitcoin mempool updates, preserves what it observed, turn
     Streaming:  WebSocket -> local messages.jsonl + Kafka raw topic -> enrich -> Kafka enriched topic -> Parquet
     Replay:     saved messages.jsonl -> Kafka raw topic -> JSONL archive -> process
     Query:      process + detect output -> load-results / load-events -> Postgres -> API (serve) and Grafana
+    Unattended: collect-loop (back-to-back sessions) -> process-pending (process, screen, compact, log) -> sync-pending (AWS: S3)
 
 The raw JSONL file is the source record. Kafka moves and buffers messages; it does not replace that file.
 
@@ -19,6 +20,7 @@ The raw JSONL file is the source record. Kafka moves and buffers messages; it do
 - kafka-enrich reads raw messages and parses lifecycle events. When an added transaction already has the fields needed for features, it makes no web request. If those fields are missing, it fetches transaction details from the mempool.space REST API under a request-per-second limit and a per-run cap. Failures are written to the Kafka error topic.
 - kafka-parquet reads enriched messages and stores them as Zstandard-compressed Parquet files. Each message ID has a stable file, so a restart does not add it twice.
 - db-init creates the Postgres tables. load-results copies screened scores into Postgres; load-events copies lifecycle events and recomputes each touched transaction's status from its evidence. Both can be repeated safely. serve runs the read-only API, and trace shows everything stored about one txid and re-derives its features from the raw capture. See the [M2 guide](M2_POSTGRES.md).
+- collect-loop captures sessions back to back into data/raw/session-* until a deadline, a session limit, or low disk; process-pending processes, screens, compacts and logs every finished session (optionally loading Postgres); sync-pending uploads each session to S3 once. collect is one session plus process-pending. The laptop task, the Airflow DAG and the AWS instance all run these. See [collection](M4_COLLECTION.md) and [AWS](AWS_DEPLOY.md).
 - process reads a saved capture JSONL file offline. It writes normalized lifecycle events, transaction features, and an error report.
 - detect reads features offline and flags three simple shapes: many inputs, many outputs, or repeated output values. A flag means unusual structure; it does not establish wrongdoing.
 
@@ -46,6 +48,7 @@ Kafka consumers use a group ID to remember their progress. Reuse the same group 
 | `lifecycle.py` | 111 | Lifecycle evidence load and status projection (`load-events`) |
 | `api.py` | 176 | Read-only FastAPI app (`serve`) |
 | `trace.py` | 62 | Stored record to raw capture line, with a feature recomputation check |
+| `collector.py` | ~300 | Unattended collection: capture loop, idempotent processing of finished sessions, compaction, lock, S3 upload (`collect`, `collect-loop`, `process-pending`, `sync-pending`) |
 | `registry.py` | ~270 | Detector bundles, append-only registry, promotion gate, rollback, scoring through a bundle (`detectors ...`) |
 | `sweep.py` | ~190 | Seeded, consistent synthetic transactions with labels; scores them with the rules and the calibrated model (`sweep`) |
 | `evaluate.py` | ~150 | Threshold calibration, test scoring, agreement with the rules (`evaluate-iforest`) |
@@ -54,9 +57,22 @@ Kafka consumers use a group ID to remember their progress. Reuse the same group 
 
 Kafka topics: `blockpulse.raw.v1`, `blockpulse.enriched.v1`, `blockpulse.errors.v1`. Each has 3 partitions and 7-day retention, and records are keyed by capture session ID.
 
+## Outside the Python package
+
+| Path | What it is |
+| --- | --- |
+| `infra/aws/terraform/` | Terraform for the AWS collector (VPC, instance, S3, IAM, budget) and its offline tests (`terraform test`, mocked provider) |
+| `infra/aws/instance/` | What runs on the instance: `install.sh`, `deadline-check.sh`, and the hardened systemd units |
+| `infra/aws/build_bundle.py` | Builds the reproducible zip the instance installs |
+| `infra/aws/tests/` | Amazon Linux 2023 container rehearsals: bootstrap smoke test and real systemd end to end |
+| `orchestration/airflow/` | Optional Airflow DAG and image (never run) |
+| `observability/grafana/` | Provisioned Grafana datasource and dashboard |
+| `scripts/` | Laptop collection (`capture_session.ps1`, `install_collector.ps1`), M2 demo, M3 reproduction |
+| `.github/workflows/ci.yml` | CI: pytest with Postgres, Terraform checks, container rehearsals |
+
 ## Technologies and how they fit
 
-Python runs the commands and pipeline logic. PostgreSQL stores scores and lifecycle evidence for querying; FastAPI serves them read-only; Grafana charts them from the same database. The websockets library receives live source messages. Apache Kafka runs in Docker Compose as one local KRaft broker; confluent-kafka connects Python producers and consumers to it. PyArrow writes Parquet, a compressed columnar format for later analysis. JSONL keeps the original messages inspectable and makes offline replay easy. CSV makes feature rows easy to open in a spreadsheet. pytest checks the parsing, features, Kafka behavior, and recovery rules.
+Terraform describes the AWS collector; systemd runs it on the instance; the AWS CLI on the instance uploads to S3. Python runs the commands and pipeline logic. PostgreSQL stores scores and lifecycle evidence for querying; FastAPI serves them read-only; Grafana charts them from the same database. The websockets library receives live source messages. Apache Kafka runs in Docker Compose as one local KRaft broker; confluent-kafka connects Python producers and consumers to it. PyArrow writes Parquet, a compressed columnar format for later analysis. JSONL keeps the original messages inspectable and makes offline replay easy. CSV makes feature rows easy to open in a spreadsheet. pytest checks the parsing, features, Kafka behavior, and recovery rules.
 
 The broker has one node, so it is a learning setup, not a highly available service. The current Parquet writer makes one small file per message for simple restart behavior. Enrichment only calls the public REST endpoint for incomplete added transactions, and the provider may return rate-limit errors. Postgres, the API, and one Grafana dashboard exist (M2). There is no trained model, streaming feature/score worker, or entity analysis yet: scoring still runs offline, and the Kafka path and the Postgres path are connected only through files.
 

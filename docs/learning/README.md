@@ -30,6 +30,8 @@ Each exercise is sized for one sitting of about 30-60 minutes. Stop when a conce
 | 14 | Choosing a threshold without labels | Alert budgets, calibration vs test, why the flag rate moved, agreement is not accuracy | `evaluate.py` → `choose_threshold()`; [first results](../experiments/2026-10-14-m3-first-evaluation.md) | To write together |
 | 15 | Testing a detector on shapes you define | Synthetic labeled cases, benign controls, why a sweep isn't accuracy, saturation | `sweep.py` → `cases()`; [sweep results](../experiments/2026-10-14-m3-synthetic-sweep.md) | To write together |
 | 16 | Who is in charge? Champions, gates, and rollback | Registries as event logs, promotion criteria, why a rejected model is still a result | `registry.py` → `evaluate_promotion()`, `state()`; [M3 report](../M3_REPORT.md) | To write together |
+| 17 | Infrastructure as code you can test | Terraform resources and variables, mocked-provider tests, least-privilege IAM, why no inbound ports | `infra/aws/terraform/` and `tests/collector.tftest.hcl`; [AWS runbook](../AWS_DEPLOY.md) | To write together |
+| 18 | Running a service properly on Linux | systemd services and timers, clean shutdown with SIGINT, sandboxing, idempotent jobs | `infra/aws/instance/systemd/`, `collector.py`; `infra/aws/tests/systemd_e2e.sh` | To write together |
 
 ## Exercise outlines
 
