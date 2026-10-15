@@ -1,3 +1,8 @@
-# Scripts that run inside Linux containers must keep Unix line endings.
+# Files that run or are read on Linux (containers, the AWS instance) must keep Unix line endings.
 *.sh text eol=lf
 *.py text eol=lf
+*.service text eol=lf
+*.timer text eol=lf
+*.tftpl text eol=lf
+*.tf text eol=lf
+*.hcl text eol=lf

@@ -1,0 +1,29 @@
+#!/bin/bash
+# Rendered by Terraform; runs once, as root, at first boot. Fetches the app bundle and hands over to install.sh.
+# Log: /var/log/blockpulse-bootstrap.log
+set -euo pipefail
+exec > >(tee -a /var/log/blockpulse-bootstrap.log) 2>&1
+echo "bootstrap started $(date -u +%FT%TZ)"
+
+mkdir -p /opt/blockpulse
+# The instance role can take a few seconds to become usable after launch, so retry the download.
+for attempt in $(seq 1 12); do
+    if aws s3 cp "s3://${bucket}/${bundle_key}" /opt/blockpulse/app.zip --region "${region}" --only-show-errors; then
+        break
+    fi
+    if [ "$attempt" -eq 12 ]; then echo "could not download the app bundle" >&2; exit 1; fi
+    sleep 10
+done
+
+rm -rf /opt/blockpulse/app
+python3 -m zipfile -e /opt/blockpulse/app.zip /opt/blockpulse/app
+
+BLOCKPULSE_BUCKET="${bucket}" \
+BLOCKPULSE_DEADLINE="${deadline}" \
+BLOCKPULSE_URL="${source_url}" \
+BLOCKPULSE_SESSION_SECONDS="${session_seconds}" \
+AWS_REGION="${region}" \
+APP_DIR=/opt/blockpulse/app \
+    bash /opt/blockpulse/app/infra/aws/instance/install.sh
+
+echo "bootstrap finished $(date -u +%FT%TZ)"

@@ -14,3 +14,12 @@ __pycache__/
 .env
 .env.*
 !.env.example
+
+# Terraform: local state holds resource IDs (keep it until after destroy, but never commit it)
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+crash.log
+# Built AWS app bundle
+/infra/aws/build/

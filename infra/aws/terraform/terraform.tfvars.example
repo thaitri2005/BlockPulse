@@ -1,0 +1,8 @@
+# Copy to terraform.tfvars (git-ignored) and edit. Every value here has a sensible default except alert_email.
+alert_email       = "you@example.com" # budget emails; strongly recommended
+budget_usd        = 15
+region            = "us-west-2"
+max_runtime_hours = 96 # collection stops and the instance powers off after this
+# instance_type     = "t4g.small"
+# root_volume_gb    = 40
+# bucket_force_destroy = false   # set true only after downloading the data, right before `terraform destroy`

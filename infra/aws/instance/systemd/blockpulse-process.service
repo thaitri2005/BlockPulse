@@ -1,0 +1,42 @@
+[Unit]
+Description=BlockPulse: process finished captures, then upload new sessions and status to S3
+Documentation=file:///opt/blockpulse/app/docs/AWS_DEPLOY.md
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=blockpulse
+Group=blockpulse
+EnvironmentFile=/etc/blockpulse/collector.env
+WorkingDirectory=/srv/blockpulse
+# The leading "-" lets the upload run even if one session failed to process; that session is retried next time.
+ExecStart=-/opt/blockpulse/venv/bin/python -m blockpulse process-pending --root /srv/blockpulse/data
+ExecStart=/opt/blockpulse/venv/bin/python -m blockpulse sync-pending --root /srv/blockpulse/data --bucket ${BLOCKPULSE_BUCKET}
+TimeoutStartSec=50min
+Nice=10
+MemoryMax=1G
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/srv/blockpulse
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictNamespaces=yes
+RestrictRealtime=yes
+ProtectClock=yes
+ProtectHostname=yes
+ProtectKernelLogs=yes
+ProtectProc=invisible
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+UMask=0027
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK

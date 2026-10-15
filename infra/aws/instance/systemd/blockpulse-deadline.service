@@ -1,0 +1,7 @@
+[Unit]
+Description=BlockPulse: power off after the collection deadline (with a final upload)
+Documentation=file:///opt/blockpulse/app/docs/AWS_DEPLOY.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/blockpulse-deadline-check
