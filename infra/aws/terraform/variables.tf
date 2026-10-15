@@ -115,3 +115,25 @@ variable "budget_usd" {
     error_message = "budget_usd must be between 0 and 1000."
   }
 }
+
+variable "lake_start_date" {
+  description = "First date (yyyy-MM-dd) Athena partition projection considers for the lake tables."
+  type        = string
+  default     = "2026-10-01"
+
+  validation {
+    condition     = can(regex("^[0-9]{4}-[0-9]{2}-[0-9]{2}$", var.lake_start_date))
+    error_message = "lake_start_date must be yyyy-MM-dd."
+  }
+}
+
+variable "athena_bytes_scanned_cutoff" {
+  description = "Athena cancels any query in the workgroup that would scan more than this many bytes (cost guard). Default 1 GiB, about half a cent."
+  type        = number
+  default     = 1073741824
+
+  validation {
+    condition     = var.athena_bytes_scanned_cutoff >= 10485760
+    error_message = "Athena's minimum per-query cutoff is 10 MB (10485760 bytes)."
+  }
+}

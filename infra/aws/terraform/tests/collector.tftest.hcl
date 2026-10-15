@@ -210,3 +210,52 @@ run "rejects_bad_name" {
 
   expect_failures = [var.name]
 }
+
+run "athena_reads_the_lake_with_partition_projection_and_a_scan_cap" {
+  command = apply
+
+  assert {
+    condition     = toset(keys(aws_glue_catalog_table.lake)) == toset(["transactions", "lifecycle_events", "capture_sessions"])
+    error_message = "One Glue table per lake table."
+  }
+  assert {
+    condition     = alltrue([for t in aws_glue_catalog_table.lake : t.parameters["projection.enabled"] == "true" && t.table_type == "EXTERNAL_TABLE"])
+    error_message = "Every lake table must use partition projection (no crawler)."
+  }
+  assert {
+    condition     = aws_glue_catalog_table.lake["transactions"].parameters["storage.location.template"] == "s3://blockpulse-data-test/data/lake/transactions/dt=$${dt}/hour=$${hour}/"
+    error_message = "Hourly tables must project dt and hour onto the collector's upload layout."
+  }
+  assert {
+    condition     = length(aws_glue_catalog_table.lake["capture_sessions"].partition_keys) == 1 && length(aws_glue_catalog_table.lake["transactions"].partition_keys) == 2
+    error_message = "capture_sessions is partitioned by day only; the hourly tables by dt and hour."
+  }
+  assert {
+    condition     = length(aws_glue_catalog_table.lake["transactions"].storage_descriptor[0].columns) == length(jsondecode(file("lake_schema.json")).tables.transactions.columns)
+    error_message = "Glue columns must come from lake_schema.json."
+  }
+  assert {
+    condition = (aws_athena_workgroup.lake.configuration[0].enforce_workgroup_configuration
+      && aws_athena_workgroup.lake.configuration[0].bytes_scanned_cutoff_per_query == 1073741824
+    && aws_athena_workgroup.lake.configuration[0].result_configuration[0].encryption_configuration[0].encryption_option == "SSE_S3")
+    error_message = "The workgroup must enforce its settings, cap scans at 1 GiB, and encrypt results."
+  }
+  assert {
+    condition     = length(aws_athena_named_query.demo) == 4
+    error_message = "The four shared demo queries must be saved in Athena."
+  }
+  assert {
+    condition     = one([for r in aws_s3_bucket_lifecycle_configuration.data.rule : r.expiration[0].days if r.id == "expire-athena-results"]) == 7
+    error_message = "Athena results must expire after 7 days."
+  }
+}
+
+run "rejects_tiny_athena_cutoff" {
+  command = plan
+
+  variables {
+    athena_bytes_scanned_cutoff = 1000
+  }
+
+  expect_failures = [var.athena_bytes_scanned_cutoff]
+}

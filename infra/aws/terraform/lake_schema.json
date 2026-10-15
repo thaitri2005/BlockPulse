@@ -1,0 +1,235 @@
+{
+  "schema_version": 1,
+  "tables": {
+    "transactions": {
+      "hourly": true,
+      "columns": [
+        {
+          "name": "txid",
+          "type": "string",
+          "comment": "Transaction id"
+        },
+        {
+          "name": "event_id",
+          "type": "string",
+          "comment": "Lifecycle event the features came from"
+        },
+        {
+          "name": "session",
+          "type": "string",
+          "comment": "Capture session"
+        },
+        {
+          "name": "received_at",
+          "type": "timestamp",
+          "comment": "UTC receive time of the observation"
+        },
+        {
+          "name": "source_mode",
+          "type": "string",
+          "comment": ""
+        },
+        {
+          "name": "feature_set_version",
+          "type": "string",
+          "comment": ""
+        },
+        {
+          "name": "n_in",
+          "type": "int",
+          "comment": ""
+        },
+        {
+          "name": "n_out",
+          "type": "int",
+          "comment": ""
+        },
+        {
+          "name": "value_out_sat",
+          "type": "bigint",
+          "comment": "Sum of outputs, includes change"
+        },
+        {
+          "name": "fee_sat",
+          "type": "bigint",
+          "comment": ""
+        },
+        {
+          "name": "vsize",
+          "type": "int",
+          "comment": ""
+        },
+        {
+          "name": "fee_rate_sat_vb",
+          "type": "double",
+          "comment": ""
+        },
+        {
+          "name": "max_equal_output_count",
+          "type": "int",
+          "comment": ""
+        },
+        {
+          "name": "round_amount_fraction",
+          "type": "double",
+          "comment": ""
+        },
+        {
+          "name": "rbf_signaled",
+          "type": "boolean",
+          "comment": "Null when inputs were incomplete"
+        },
+        {
+          "name": "ruleset_version",
+          "type": "string",
+          "comment": ""
+        },
+        {
+          "name": "is_flagged",
+          "type": "boolean",
+          "comment": "Structural rule match; not evidence of wrongdoing"
+        },
+        {
+          "name": "signal_count",
+          "type": "int",
+          "comment": ""
+        },
+        {
+          "name": "rule_ids",
+          "type": "array<string>",
+          "comment": ""
+        }
+      ]
+    },
+    "lifecycle_events": {
+      "hourly": true,
+      "columns": [
+        {
+          "name": "event_id",
+          "type": "string",
+          "comment": ""
+        },
+        {
+          "name": "session",
+          "type": "string",
+          "comment": ""
+        },
+        {
+          "name": "run_id",
+          "type": "string",
+          "comment": ""
+        },
+        {
+          "name": "txid",
+          "type": "string",
+          "comment": ""
+        },
+        {
+          "name": "event_type",
+          "type": "string",
+          "comment": "added | removed | mined | replaced"
+        },
+        {
+          "name": "event_time",
+          "type": "timestamp",
+          "comment": ""
+        },
+        {
+          "name": "source_sequence",
+          "type": "bigint",
+          "comment": ""
+        },
+        {
+          "name": "replacement_txid",
+          "type": "string",
+          "comment": "For replaced: the transaction that replaced it"
+        },
+        {
+          "name": "source_message_id",
+          "type": "string",
+          "comment": ""
+        }
+      ]
+    },
+    "capture_sessions": {
+      "hourly": false,
+      "columns": [
+        {
+          "name": "session",
+          "type": "string",
+          "comment": ""
+        },
+        {
+          "name": "run_id",
+          "type": "string",
+          "comment": ""
+        },
+        {
+          "name": "source_url",
+          "type": "string",
+          "comment": ""
+        },
+        {
+          "name": "started_at",
+          "type": "timestamp",
+          "comment": ""
+        },
+        {
+          "name": "ended_at",
+          "type": "timestamp",
+          "comment": ""
+        },
+        {
+          "name": "elapsed_seconds",
+          "type": "double",
+          "comment": ""
+        },
+        {
+          "name": "stop_reason",
+          "type": "string",
+          "comment": ""
+        },
+        {
+          "name": "messages_saved",
+          "type": "bigint",
+          "comment": ""
+        },
+        {
+          "name": "connection_errors",
+          "type": "bigint",
+          "comment": ""
+        },
+        {
+          "name": "recorded_gaps",
+          "type": "bigint",
+          "comment": ""
+        },
+        {
+          "name": "recorded_gap_seconds",
+          "type": "double",
+          "comment": "Lower bound on missing coverage"
+        },
+        {
+          "name": "events_added",
+          "type": "bigint",
+          "comment": ""
+        },
+        {
+          "name": "events_removed",
+          "type": "bigint",
+          "comment": ""
+        },
+        {
+          "name": "events_mined",
+          "type": "bigint",
+          "comment": ""
+        },
+        {
+          "name": "events_replaced",
+          "type": "bigint",
+          "comment": ""
+        }
+      ]
+    }
+  }
+}

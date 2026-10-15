@@ -30,3 +30,18 @@ output "download_command" {
   description = "Copy collected sessions into the local data/ folder (run from the repository root)."
   value       = "aws s3 sync s3://${aws_s3_bucket.data.bucket}/data/ data/ --region ${var.region}"
 }
+
+output "athena_workgroup" {
+  description = "Athena workgroup for lake queries (per-query scan cap, encrypted results)."
+  value       = aws_athena_workgroup.lake.name
+}
+
+output "glue_database" {
+  description = "Glue database holding the lake tables: transactions, lifecycle_events, capture_sessions."
+  value       = aws_glue_catalog_database.lake.name
+}
+
+output "athena_example_command" {
+  description = "Run a query from the command line (results land in the bucket under athena-results/)."
+  value       = "aws athena start-query-execution --work-group ${aws_athena_workgroup.lake.name} --query-execution-context Database=${aws_glue_catalog_database.lake.name} --query-string \"SELECT dt, hour, COUNT(*) FROM transactions GROUP BY dt, hour ORDER BY dt, hour\" --region ${var.region}"
+}
