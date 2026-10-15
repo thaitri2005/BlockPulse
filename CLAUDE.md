@@ -11,7 +11,7 @@ The project owner is learning streaming data engineering while building this. Op
 
 ## Where things are
 
-- Canonical plan, status, and next steps: `docs/PROJECT_PLAN.md` (§16 milestones and M2 step table, §21 tracker).
+- Canonical plan, status, and next steps: `docs/PROJECT_PLAN.md` (§16 milestones and the data engineering roadmap DE1-DE6, §21 tracker). The project's purpose is data engineering skill (D18).
 - What's actually built: `docs/ARCHITECTURE_CURRENT.md`. Where the build differs from the plan, the plan has an **As built** note; keep both in sync.
 - Evidence for every measured claim: `docs/experiments/YYYY-MM-DD-*.md`.
 - Naming: milestones are M0-M4. `PHASE0.md` is M0 and `PHASE1.md` is M2.0; use M-numbers for new work.
@@ -19,7 +19,7 @@ The project owner is learning streaming data engineering while building this. Op
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # 94 passed, 15 skipped; with BLOCKPULSE_TEST_DSN set (see docs/M2_POSTGRES.md): 108 passed, 1 skipped
+.\.venv\Scripts\python.exe -m pytest -q          # 105 passed, 15 skipped; with BLOCKPULSE_TEST_DSN set (see docs/M2_POSTGRES.md): 119 passed, 1 skipped
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
 docker compose --profile m2 up -d --wait          # Postgres + Grafana (~900 MB); `stop` when done
@@ -47,6 +47,8 @@ The live WebSocket needs `--url wss://node203.sv1.mempool.space/api/v1/ws`, beca
 - `data/` is git-ignored local evidence. Never delete or overwrite run directories; commands create new ones.
 - Tests must not hit the public API. Postgres tests drop the `public` schema: only ever point `BLOCKPULSE_TEST_DSN` at `blockpulse_test`.
 - Schema changes are new numbered files in `src/blockpulse/migrations/`; never edit an applied one.
+- The lake contract in `src/blockpulse/lake.py` is the single schema source. After changing it, regenerate `infra/aws/terraform/lake_schema.json` with `python -m blockpulse lake-schema --output infra/aws/terraform/lake_schema.json` (a test fails otherwise) and bump `LAKE_SCHEMA_VERSION` if existing files become incompatible.
+- SQL in `analytics/queries/` must run in both DuckDB and Athena (Trino): stick to standard SQL, and test with `blockpulse lake-query`.
 - Tests must not hit the public API. Use the fixtures in `examples/fixtures/` or mocks, as the existing tests do.
 - Amounts are integer satoshis. Missing values are errors, never zero.
 - Feature or rule changes bump `FEATURE_SET_VERSION` / `RULESET_VERSION`.

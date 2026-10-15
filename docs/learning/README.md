@@ -32,6 +32,8 @@ Each exercise is sized for one sitting of about 30-60 minutes. Stop when a conce
 | 16 | Who is in charge? Champions, gates, and rollback | Registries as event logs, promotion criteria, why a rejected model is still a result | `registry.py` → `evaluate_promotion()`, `state()`; [M3 report](../M3_REPORT.md) | To write together |
 | 17 | Infrastructure as code you can test | Terraform resources and variables, mocked-provider tests, least-privilege IAM, why no inbound ports | `infra/aws/terraform/` and `tests/collector.tftest.hcl`; [AWS runbook](../AWS_DEPLOY.md) | To write together |
 | 18 | Running a service properly on Linux | systemd services and timers, clean shutdown with SIGINT, sandboxing, idempotent jobs | `infra/aws/instance/systemd/`, `collector.py`; `infra/aws/tests/systemd_e2e.sh` | To write together |
+| 19 | Lake layout and data contracts | Parquet vs JSONL, Hive partitions and pruning, small files, quarantine vs silent fixes, idempotent rebuilds | `lake.py` → `validate()`, `build_session()`; [lake](../LAKE.md) | To write together |
+| 20 | One SQL, two engines | DuckDB over local files, Athena over S3, partition projection, scan cost | `analytics.py`, `analytics/queries/`, `infra/aws/terraform/analytics.tf` | To write together |
 
 ## Exercise outlines
 

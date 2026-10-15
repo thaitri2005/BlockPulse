@@ -9,7 +9,7 @@ All runners call the same tested commands in [`src/blockpulse/collector.py`](../
 | Command | What it does |
 | --- | --- |
 | `blockpulse collect-loop` | Captures sessions back to back into `data/raw/session-*` until a deadline, a session limit, or low disk (default stop below 15 GiB free). Each session survives up to 300 reconnects. Stops cleanly on Ctrl+C or SIGINT. |
-| `blockpulse process-pending` | For every finished capture not yet handled: process, rule-screen, gzip the bulky events file, add a row to `data/capture_log.csv`. With `--load-db`, also loads into Postgres once per session. Safe to repeat; an interrupted stage is moved aside (never deleted) and redone; a lock stops two processors colliding. |
+| `blockpulse process-pending` | For every finished capture not yet handled: process, rule-screen, write the partitioned Parquet lake tables through the quality gate ([lake](LAKE.md)), gzip the bulky events file, add a row to `data/capture_log.csv`. With `--load-db`, also loads into Postgres once per session. Safe to repeat; an interrupted stage is moved aside (never deleted) and redone; a lock stops two processors colliding. |
 | `blockpulse collect` | One `collect-loop` session followed by `process-pending`. |
 | `blockpulse sync-pending` | Uploads each processed session to S3 once, plus `status/status.json` and the capture log (AWS only). |
 

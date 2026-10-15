@@ -6,7 +6,8 @@ BlockPulse listens for Bitcoin mempool updates, preserves what it observed, turn
     Streaming:  WebSocket -> local messages.jsonl + Kafka raw topic -> enrich -> Kafka enriched topic -> Parquet
     Replay:     saved messages.jsonl -> Kafka raw topic -> JSONL archive -> process
     Query:      process + detect output -> load-results / load-events -> Postgres -> API (serve) and Grafana
-    Unattended: collect-loop (back-to-back sessions) -> process-pending (process, screen, compact, log) -> sync-pending (AWS: S3)
+    Unattended: collect-loop (back-to-back sessions) -> process-pending (process, screen, lake, compact, log) -> sync-pending (AWS: S3)
+    Lake:       screened + events + capture summary -> quality gate -> partitioned Parquet (dt/hour) -> DuckDB (lake-query) / Athena
 
 The raw JSONL file is the source record. Kafka moves and buffers messages; it does not replace that file.
 
@@ -48,6 +49,8 @@ Kafka consumers use a group ID to remember their progress. Reuse the same group 
 | `lifecycle.py` | 111 | Lifecycle evidence load and status projection (`load-events`) |
 | `api.py` | 176 | Read-only FastAPI app (`serve`) |
 | `trace.py` | 62 | Stored record to raw capture line, with a feature recomputation check |
+| `lake.py` | ~300 | Lake table contracts, quality gate with quarantine, partitioned Parquet writer, Glue schema export (`lake-schema`) |
+| `analytics.py` | ~50 | DuckDB views over the lake mirroring the Athena tables (`lake-query`) |
 | `collector.py` | ~300 | Unattended collection: capture loop, idempotent processing of finished sessions, compaction, lock, S3 upload (`collect`, `collect-loop`, `process-pending`, `sync-pending`) |
 | `registry.py` | ~270 | Detector bundles, append-only registry, promotion gate, rollback, scoring through a bundle (`detectors ...`) |
 | `sweep.py` | ~190 | Seeded, consistent synthetic transactions with labels; scores them with the rules and the calibrated model (`sweep`) |
@@ -65,6 +68,7 @@ Kafka topics: `blockpulse.raw.v1`, `blockpulse.enriched.v1`, `blockpulse.errors.
 | `infra/aws/instance/` | What runs on the instance: `install.sh`, `deadline-check.sh`, and the hardened systemd units |
 | `infra/aws/build_bundle.py` | Builds the reproducible zip the instance installs |
 | `infra/aws/tests/` | Amazon Linux 2023 container rehearsals: bootstrap smoke test and real systemd end to end |
+| `analytics/queries/` | Shared demo SQL, run by DuckDB locally and saved as Athena named queries |
 | `orchestration/airflow/` | Optional Airflow DAG and image (never run) |
 | `observability/grafana/` | Provisioned Grafana datasource and dashboard |
 | `scripts/` | Laptop collection (`capture_session.ps1`, `install_collector.ps1`), M2 demo, M3 reproduction |

@@ -2,9 +2,9 @@
 
 | Document field | Value |
 | --- | --- |
-| Status | M0-M3 complete locally; AWS data collector (E3a) ready to deploy; M4 (reliable local release) next |
-| Version | 2.0 |
-| Created / last updated | 2026-10-08 / 2026-10-15 |
+| Status | M0-M3 complete; lake + Athena (DE1-DE2) built; AWS collector ready to deploy; next: deploy, then proof artifacts (DE3) |
+| Version | 2.1 |
+| Created / last updated | 2026-10-08 / 2026-10-16 |
 | Intended builder | One developer working part-time |
 | Primary environment | Local machine; containers before Kubernetes |
 | Hardware (measured 2026-10-09) | Intel i5-1340P (12 cores / 16 threads), 15.6 GiB RAM, ~66 GiB free on D:; Windows 11 + Docker Desktop |
@@ -29,7 +29,9 @@ Quick navigation:
 
 ## 1. Project identity and purpose
 
-**BlockPulse is a real-time Bitcoin transaction anomaly pipeline that combines streaming ingestion, reproducible feature engineering, explainable anomaly screening, and measurable operational behavior.**
+**BlockPulse is a Bitcoin mempool data pipeline: streaming capture, a partitioned Parquet lake with data-quality checks, SQL analytics with DuckDB and Athena, reproducible feature engineering, and explainable anomaly screening, with measurable operational behavior.**
+
+Its purpose is to build data engineering skill on a real live data source (decision D18). Anomaly detection is the use case that gives the data a reason to flow; the engineering around ingestion, storage layout, data quality, orchestration, infrastructure and evidence is the point.
 
 It observes transactions reported by a Bitcoin mempool source, records what it actually saw, enriches transaction details, computes structural features, and produces anomaly scores. Interesting results are stored with their features, detector version, and transaction lifecycle evidence so they can be inspected later.
 
@@ -851,6 +853,22 @@ Suggested steps, one session each:
 
 Core estimate: **approximately 80-120 focused hours before contingency**. Allow roughly 20% extra. At 8-12 hours/week, this suggests about **8-18 weeks**, not a fixed deadline. Re-estimate after M0 and M2.
 
+### Data engineering roadmap (2026-10-16)
+
+The project's goal is to strengthen data engineering and data processing skills (decision D18), so the remaining work is ordered by how much it builds and demonstrates them, not by the original milestone numbering. The lake comes first because the AWS run should collect data in its final layout. Each step ends with tests, docs and a commit, as before.
+
+| Step | What | Data engineering skills it builds | Status |
+| --- | --- | --- | --- |
+| DE1 | Partitioned Parquet lake (`dt`/`hour`, file per session per partition) with a contract-based quality gate, quarantine and per-session quality reports, built by `process-pending` | Columnar storage, partitioning, small-file avoidance, schema as code, data contracts, idempotent rebuilds | **Done** 2026-10-16 ([lake](LAKE.md)) |
+| DE2 | Glue tables with partition projection, an Athena workgroup with a scan cap, saved queries; the same SQL runs locally in DuckDB | Data lake querying, catalog management, cost-aware SQL, one SQL for local and cloud | **Done** 2026-10-16, verified offline ([lake](LAKE.md#query-it-in-aws-athena)) |
+| E3a | Deploy the AWS collector for about 96 hours; the lake fills in S3 and is queryable in Athena | Running a pipeline in the cloud with IaC, monitoring by status files, teardown | **Ready; owner deploys** ([AWS_DEPLOY.md](AWS_DEPLOY.md)) |
+| DE3 | Proof artifacts (the core of M4): a replay load test with measured throughput and latency on a day of data; failure drills (kill a consumer, Postgres, the broker) showing no loss and no duplicate rows; CI green on GitHub; a clean pinned environment | Benchmarking, reliability engineering, at-least-once correctness, CI | Next (can run while E3a collects) |
+| DE4 | Modeling layer with dbt on the lake (dbt-duckdb locally, dbt-athena optional): staging and mart models (`fct_transactions`, `fct_hourly_activity`, `dim_capture_sessions`), dbt tests, generated docs and lineage | SQL modeling, layered transformations, data tests, documentation | Planned |
+| DE5 | Airflow DAG over the batch tier, run per date partition, with a demonstrated backfill of past dates (safe because every stage is idempotent) | Orchestration, scheduling, backfills, retries | Planned; the DAG skeleton exists, the image download failed once |
+| DE6 | Kubernetes: k3d locally and a Helm chart for the stack (Kafka via Strimzi or Redpanda, Postgres StatefulSet, API, Grafana) with probes and resource limits; pod-kill failure drills; optionally k3s on EC2 for a recorded demo, then destroy | Container orchestration, stateful workloads, operational recovery | Planned (last) |
+
+Deliberately avoided because of cost or scope: managed Kafka (MSK) and EKS (each costs more per month than the whole project), RDS, and anything that has to stay running after a demo. If time runs short, stopping after DE4 still leaves a complete data engineering project; DE5 and DE6 are the parts that can be dropped without breaking the story.
+
 ### Optional milestone E1 — Entity analysis
 
 **Estimate:** 20-40 additional hours, with high uncertainty. **Depends on:** completed core and acceptable coverage/memory measurements.
@@ -992,6 +1010,8 @@ These are proposed defaults for the first implementation. Change them when evide
 | D14 | Local append-only detector registry instead of MLflow | Same register/promote/rollback operations without another service; revisit with several models or collaborators |
 | D15 | One collector implementation (`collect-loop`, `process-pending`, `sync-pending`) shared by every runner | Decided 2026-10-15: the laptop task, Airflow and AWS differ only in scheduling, so behavior and tests are shared. Airflow is optional and unverified ([collection](M4_COLLECTION.md)) |
 | D16 | Pull a minimal AWS run (E3a) ahead of M4 to collect data | Decided 2026-10-15: the M3 rerun needs days of continuous data, which a laptop can't reliably provide. Smallest profile: one instance, no NAT, systemd instead of Compose, self-expiring, about $3 ([AWS_DEPLOY.md](AWS_DEPLOY.md)) |
+| D18 | The project's purpose is data engineering skill; remaining work follows the DE roadmap in Section 16 | Decided 2026-10-16 after reviewing outside advice: lake and Athena before the AWS run, then proof artifacts, dbt, Airflow, Kubernetes. Anomaly detection stays as the use case |
+| D19 | One schema and one SQL for local and cloud: the Python lake contract generates the Glue columns, and DuckDB views mirror the Athena tables | Decided 2026-10-16: catalog drift is caught by a test, and every query is tested offline before it costs anything |
 | D17 | Infrastructure is tested offline before any deploy | Terraform tests with mocked providers and container rehearsals of the instance run locally and in CI; nothing is applied to a real account from an automated session |
 
 When a choice becomes implementation-critical, add a short decision note with context, alternatives, chosen behavior, consequences, and evidence. Keep superseded notes for history; update this document to show the current choice.
@@ -1048,17 +1068,18 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 | M4: reliable local release | Not started | Next. Starts with a clean pinned environment, then the live Kafka smoke test and failure experiments |
 | E1: entity analysis | Deferred | Optional; gate on data coverage and memory |
 | E2: Kubernetes/networking | Deferred | Optional; gate on completed local core |
-| E3: AWS experiment | E3a ready to deploy | Data collector built and verified offline ([AWS_DEPLOY.md](AWS_DEPLOY.md)): `terraform test` 7/7 with a mocked provider, Amazon Linux 2023 rehearsal 7/7, real systemd units pass end to end including the deadline poweroff. Not applied to a real account yet. Estimated $2.60 to $4.40 for 96 hours |
+| DE1-DE2: lake and Athena | Done | [Lake guide](LAKE.md): partitioned Parquet with a quality gate (0 of 57,857 real rows quarantined), four shared queries run on the real lake in DuckDB; Glue tables with partition projection, scan-capped Athena workgroup and saved queries in Terraform (tested with a mocked provider) |
+| E3: AWS experiment | E3a ready to deploy | Data collector built and verified offline ([AWS_DEPLOY.md](AWS_DEPLOY.md)): `terraform test` 9/9 with a mocked provider (now including Athena and Glue), Amazon Linux 2023 rehearsal 7/7 (now including the lake and `pyarrow`), real systemd units pass end to end including the deadline poweroff. Not applied to a real account yet. Estimated $2.60 to $4.40 for 96 hours |
 
-Test suite on 2026-10-15: 108 passed and 1 skipped with `BLOCKPULSE_TEST_DSN` set (the skip is the optional loopback test); 94 passed and 15 skipped without it. Terraform: 7 passed. Container rehearsals: all passed.
+Test suite on 2026-10-16: 119 passed and 1 skipped with `BLOCKPULSE_TEST_DSN` set (the skip is the optional loopback test); 105 passed and 15 skipped without it. Terraform: 9 passed. Container rehearsals: all passed.
 
 **Next session, in order:**
 
-1. **Deploy the AWS collector** (owner): follow [AWS_DEPLOY.md](AWS_DEPLOY.md). Build the bundle, set `alert_email`, `terraform apply`, check `status.json` after about 10 minutes. Let it run for the default 96 hours, which covers a weekend if started by Thursday.
-2. **While it runs:** decide an alert budget (the 25 per 1,000 placeholder is about 750 alerts an hour), and do the catch-up walkthrough in the [learning path](learning/README.md).
-3. **After the deadline:** download, `process-pending --load-db`, rerun the M3 chain (`build-dataset`, `train-iforest`, `evaluate-iforest`, `sweep`, `detectors package-model`, `promote`) and compare with the 2026-10-14 results; then `terraform destroy` and record the actual cost.
-4. **M4 groundwork:** a clean pinned environment (the current venv reuses system packages with a SciPy/NumPy mismatch), then `scripts/reproduce_m3.ps1` to confirm results hold. Also push to GitHub so CI runs for the first time.
-5. **Live Kafka smoke test (about 5 minutes):** a 60-second `capture-kafka` from your own shell ([M1 guide](M1_KAFKA.md)) closes the one open M1 item.
+1. **Deploy the AWS collector** (owner): follow [AWS_DEPLOY.md](AWS_DEPLOY.md). After the first hour, run a saved query in the Athena console (`blockpulse-lake` workgroup) to see the lake filling up. Default run 96 hours; starting by Thursday covers a weekend.
+2. **DE3 while it runs:** clean pinned environment, push to GitHub so CI runs, then the replay load test and failure drills.
+3. **After the run:** download, rerun the M3 chain on the larger data, `terraform destroy`, record the actual cost.
+4. **DE4:** dbt models and tests on the lake.
+5. **Live Kafka smoke test (about 5 minutes):** a 60-second `capture-kafka` from your own shell ([M1 guide](M1_KAFKA.md)).
 
 **Housekeeping:** Kafka (up to 1 GiB), Postgres (512 MB), and Grafana (384 MB) are separate Compose profiles. Stop what you aren't using (`docker compose --profile m1 stop`, `docker compose --profile m2 stop`); data volumes persist.
 
@@ -1101,6 +1122,7 @@ Resources still running, if any:
 | 2026-10-09 | 0.8 | Started M1 with a pinned local Kafka broker profile, capture replay producer, restart-safe JSONL archive consumer, and broker-independent tests |
 | 2026-10-09 | 0.9 | Verified the 402-message raw Kafka round trip, exact processed feature/event records, and repeat-consumer behavior |
 | 2026-10-09 | 1.0 | Completed capture-to-Kafka, bounded enrichment, error topic, Zstandard Parquet archival, offset-safe restart behavior, throughput/lag summaries, and the full M1 local integration (62 passed, 1 skipped) |
+| 2026-10-16 | 2.1 | Re-centered on data engineering (D18) with a DE roadmap; built DE1 (partitioned Parquet lake with quality gate) and DE2 (Glue partition projection, scan-capped Athena workgroup, shared DuckDB/Athena SQL); D19 |
 | 2026-10-15 | 2.0 | AWS-ready: shared collector commands, Terraform stack for a self-expiring collector with offline tests, hardened systemd units, Amazon Linux 2023 container rehearsals, CI workflow, runbook and cost worksheet; decisions D15-D17; E3a pulled forward |
 | 2026-10-15 | 1.9 | Post-M3 feasibility check (section 20.1); unattended hourly collection via Windows Task Scheduler (verified on a saved capture) and an Airflow DAG with Compose service (written, not run: image download failed); disk guard and events compaction |
 | 2026-10-14 | 1.8 | Completed M3: detector bundles with reference percentiles and evidence checksums, append-only registry with promotion gate and rollback, reproduction script (6 of 6 checks), and the detection report; rules stay champion |
