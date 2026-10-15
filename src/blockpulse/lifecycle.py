@@ -5,6 +5,7 @@ and at an identical time a stronger kind wins (mined > replaced > removed > adde
 after newer ones therefore cannot overwrite newer evidence, and reloading is harmless.
 """
 
+import gzip
 import json
 from pathlib import Path
 
@@ -70,8 +71,13 @@ def _event_params(event: dict) -> dict:
 
 
 def load_events(connection, source: Path) -> dict:
-    """Load a `process` output's events.jsonl (or its directory) in one transaction."""
-    source = source / "events.jsonl" if source.is_dir() else source
+    """Load a `process` output's events.jsonl (or its directory) in one transaction.
+
+    A directory whose events file was compacted to events.jsonl.gz is read transparently.
+    """
+    if source.is_dir():
+        plain, packed = source / "events.jsonl", source / "events.jsonl.gz"
+        source = plain if plain.is_file() or not packed.is_file() else packed
     if not source.is_file():
         raise ValueError(f"Events file not found: {source}")
     summary = {"source_file": str(source.resolve()), "rows_read": 0, "inserted": 0, "duplicates": 0,
@@ -83,7 +89,8 @@ def load_events(connection, source: Path) -> dict:
             summary["status_changes"] += connection.execute(PROJECT, (sorted(touched),)).rowcount
             touched.clear()
 
-    with connection.transaction(), source.open("rb") as lines:
+    opener = gzip.open if source.suffix == ".gz" else open
+    with connection.transaction(), opener(source, "rb") as lines:
         for line_number, raw in enumerate(lines, start=1):
             summary["rows_read"] += 1
             try:

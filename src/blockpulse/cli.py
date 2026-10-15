@@ -145,6 +145,28 @@ def main(argv: list[str] | None = None) -> int:
     rollback_cmd = actions.add_parser("rollback", help="Return to the previous champion")
     rollback_cmd.add_argument("--reason", required=True)
     actions.add_parser("status", help="Show registered detectors, the champion, and recent events")
+    collect_parser = commands.add_parser("collect", help="One capture, then process (and optionally load) every finished session")
+    collect_parser.add_argument("--root", type=Path, default=Path("data"))
+    collect_parser.add_argument("--duration", type=float, default=3540)
+    collect_parser.add_argument("--url", default="wss://node203.sv1.mempool.space/api/v1/ws")
+    collect_parser.add_argument("--prefix", default="session", help="Session folder prefix; must start with 'session'")
+    collect_parser.add_argument("--load-db", action="store_true", help="Also load results into Postgres (BLOCKPULSE_DSN)")
+    collect_parser.add_argument("--min-free-gib", type=float, default=15.0)
+    loop_parser = commands.add_parser("collect-loop", help="Capture sessions back to back until a deadline or limit")
+    loop_parser.add_argument("--root", type=Path, default=Path("data"))
+    loop_parser.add_argument("--session-seconds", type=float, default=3600)
+    loop_parser.add_argument("--url", default="wss://node203.sv1.mempool.space/api/v1/ws")
+    loop_parser.add_argument("--prefix", default="session")
+    loop_parser.add_argument("--until", help="Stop at this UTC time (ISO 8601), for example 2026-10-19T04:00:00Z")
+    loop_parser.add_argument("--max-sessions", type=int)
+    loop_parser.add_argument("--min-free-gib", type=float, default=15.0)
+    pending_parser = commands.add_parser("process-pending", help="Process, screen, compact (and optionally load) every finished capture")
+    pending_parser.add_argument("--root", type=Path, default=Path("data"))
+    pending_parser.add_argument("--load-db", action="store_true", help="Also load into Postgres (BLOCKPULSE_DSN); safe to repeat")
+    sync_parser = commands.add_parser("sync-pending", help="Upload each processed session to S3 once, plus a status file")
+    sync_parser.add_argument("--root", type=Path, default=Path("data"))
+    sync_parser.add_argument("--bucket", required=True)
+    sync_parser.add_argument("--prefix", default="data")
     args = parser.parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
@@ -322,6 +344,28 @@ def main(argv: list[str] | None = None) -> int:
                 current = registry.state(events)
                 summary = {"champion": current["champion"], "previous_champions": current["previous_champions"],
                            "registered": {k: v["family"] for k, v in current["registered"].items()}, "recent_events": events[-8:]}
+        elif args.command in ("collect", "collect-loop", "process-pending", "sync-pending"):
+            from datetime import datetime
+            from blockpulse import collector
+            output = None
+            layout = collector.Layout(args.root)
+            if args.command == "collect":
+                summary = collector.collect(layout, duration=args.duration, url=args.url, prefix=args.prefix,
+                                            load_db=args.load_db, min_free_gib=args.min_free_gib)
+                code = 130 if summary["capture"]["stop_reason"] == "interrupted" else (4 if summary["processing"]["failed"] else 0)
+            elif args.command == "collect-loop":
+                until = datetime.fromisoformat(args.until.replace("Z", "+00:00")) if args.until else None
+                if until is not None and until.tzinfo is None:
+                    raise ValueError("--until needs a time zone, for example 2026-10-19T04:00:00Z")
+                summary = collector.collect_loop(layout, session_seconds=args.session_seconds, url=args.url, prefix=args.prefix,
+                                                 until=until, max_sessions=args.max_sessions, min_free_gib=args.min_free_gib)
+                code = 130 if summary["stop_reason"] == "interrupted" else 0
+            elif args.command == "process-pending":
+                summary = collector.process_pending(layout, load_db=args.load_db)
+                code = 0 if not summary["failed"] else 4
+            else:
+                summary = collector.sync_pending(layout, bucket=args.bucket, prefix=args.prefix)
+                code = 0 if not summary["failed"] else 4
         elif args.command == "kafka-init":
             output = None
             summary = _kafka_call("Kafka topic initialization", lambda: create_m1_topics(args.bootstrap_servers))
