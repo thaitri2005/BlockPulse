@@ -53,10 +53,11 @@ After the deadline the instance is stopped, so compute and the public address st
 
 ## Before you start (one time)
 
-1. **AWS account.** Sign in as an administrator for setup. A personal account is fine.
-2. **AWS CLI v2** ([install for Windows](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html)). Then sign in, preferably with IAM Identity Center: `aws configure sso` (or `aws configure` with an access key). Check with `aws sts get-caller-identity`.
-3. **Session Manager plugin** (optional, for a shell on the instance): [install](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html).
-4. **Terraform 1.9 or newer.** This machine has 1.15.8.
+1. **AWS account.** Turn on MFA for the root user, then create an everyday admin IAM user (console access, `AdministratorAccess`, its own MFA) and use that instead of root.
+2. **Check your plan** (Billing and Cost Management). Accounts opened since July 2025 choose a Free plan or a Paid plan; both get credits. The Free plan limits which services and instance types work, and may block parts of this stack (the Glue catalog is the likeliest). If `terraform apply` reports a plan or service restriction, upgrade to the Paid plan: credits are still used first.
+3. **AWS CLI v2.32 or newer** (`winget install -e --id Amazon.AWSCLI`). Sign in with `aws login` (browser sign-in, temporary credentials, no access keys), then `aws configure set region us-west-2` and check with `aws sts get-caller-identity`. If Terraform later says it can't find credentials, run `aws configure export-credentials --format powershell | Invoke-Expression` in the same window. IAM Identity Center (`aws configure sso`) also works.
+4. **Session Manager plugin** (optional, for a shell on the instance): [install](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html).
+5. **Terraform 1.9 or newer.** This machine has 1.15.8.
 
 ## Deploy
 
