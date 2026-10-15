@@ -1,0 +1,69 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python tests (with Postgres)
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: blockpulse
+          POSTGRES_PASSWORD: blockpulse_dev
+          POSTGRES_DB: blockpulse_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U blockpulse -d blockpulse_test"
+          --health-interval 5s --health-timeout 5s --health-retries 12
+    env:
+      BLOCKPULSE_TEST_DSN: postgresql://blockpulse:blockpulse_dev@localhost:5432/blockpulse_test
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e ".[dev,m1,m2,ml]" "shellcheck-py==0.10.0.1"
+      - name: Test
+        run: pytest -q
+
+  terraform:
+    name: Terraform (format, validate, offline tests)
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: infra/aws/terraform
+    steps:
+      - uses: actions/checkout@v5
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.15.8"
+      - run: terraform fmt -check -recursive
+      - run: terraform init -input=false
+      - run: terraform validate
+      - name: Test with the mocked AWS provider (no credentials)
+        run: terraform test
+
+  instance:
+    name: Instance rehearsal (Amazon Linux 2023 containers)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - name: Lint shell scripts
+        run: shellcheck infra/aws/instance/*.sh infra/aws/tests/*.sh
+      - name: Install, process, upload, stop, and deadline poweroff under systemd
+        run: bash infra/aws/tests/run_container_tests.sh
