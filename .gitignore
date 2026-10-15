@@ -23,3 +23,7 @@ terraform.tfvars
 crash.log
 # Built AWS app bundle
 /infra/aws/build/
+
+# Saved Terraform plans
+*.tfplan
+tfplan
