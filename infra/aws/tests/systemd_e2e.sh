@@ -37,7 +37,8 @@ systemctl start blockpulse-process.service || true
 [[ "$(systemctl show -p Result --value blockpulse-process.service)" == success ]] || fail "process service result"
 [[ -f "/srv/blockpulse/data/screened/$session/.uploaded" ]] || fail "session not uploaded"
 grep -q "s3://test-bucket/data/screened/$session/" /srv/blockpulse/aws-calls.log || fail "upload call"
-pass "blockpulse-process.service: processed, compacted and uploaded inside the sandbox"
+grep -q "s3://test-bucket/data/lake/transactions/dt=" /srv/blockpulse/aws-calls.log || fail "lake upload call"
+pass "blockpulse-process.service: processed, lake built, compacted and uploaded inside the sandbox"
 
 # A normal stop must be clean: SIGINT, summary written, unit inactive rather than failed.
 systemctl stop blockpulse-collect.service

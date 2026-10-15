@@ -163,6 +163,12 @@ def main(argv: list[str] | None = None) -> int:
     pending_parser = commands.add_parser("process-pending", help="Process, screen, compact (and optionally load) every finished capture")
     pending_parser.add_argument("--root", type=Path, default=Path("data"))
     pending_parser.add_argument("--load-db", action="store_true", help="Also load into Postgres (BLOCKPULSE_DSN); safe to repeat")
+    pending_parser.add_argument("--no-lake", action="store_true", help="Skip writing the partitioned Parquet lake tables")
+    lake_query = commands.add_parser("lake-query", help="Run SQL over the local Parquet lake with DuckDB (same SQL as Athena)")
+    lake_query.add_argument("query", help="A .sql file, or a named query from analytics/queries (e.g. hourly_flag_rate)")
+    lake_query.add_argument("--root", type=Path, default=Path("data"))
+    lake_schema = commands.add_parser("lake-schema", help="Print the lake table schemas (the source for the Athena/Glue tables)")
+    lake_schema.add_argument("--output", type=Path, help="Write to this file instead of printing")
     sync_parser = commands.add_parser("sync-pending", help="Upload each processed session to S3 once, plus a status file")
     sync_parser.add_argument("--root", type=Path, default=Path("data"))
     sync_parser.add_argument("--bucket", required=True)
@@ -361,11 +367,28 @@ def main(argv: list[str] | None = None) -> int:
                                                  until=until, max_sessions=args.max_sessions, min_free_gib=args.min_free_gib)
                 code = 130 if summary["stop_reason"] == "interrupted" else 0
             elif args.command == "process-pending":
-                summary = collector.process_pending(layout, load_db=args.load_db)
+                summary = collector.process_pending(layout, load_db=args.load_db, lake=not args.no_lake)
                 code = 0 if not summary["failed"] else 4
             else:
                 summary = collector.sync_pending(layout, bucket=args.bucket, prefix=args.prefix)
                 code = 0 if not summary["failed"] else 4
+        elif args.command == "lake-query":
+            try:
+                from blockpulse.analytics import run_query
+            except ImportError as error:
+                raise RuntimeError('duckdb is not installed; run: pip install -e ".[analytics]"') from error
+            output = None
+            summary = run_query(args.root, args.query)
+            code = 0
+        elif args.command == "lake-schema":
+            from blockpulse.lake import glue_columns
+            text = json.dumps(glue_columns(), indent=2) + "\n"
+            if args.output:
+                args.output.write_text(text, encoding="utf-8", newline="\n")
+                print(f"Wrote {args.output}")
+            else:
+                print(text, end="")
+            return 0
         elif args.command == "kafka-init":
             output = None
             summary = _kafka_call("Kafka topic initialization", lambda: create_m1_topics(args.bootstrap_servers))

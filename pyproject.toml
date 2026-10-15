@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "blockpulse"
 version = "0.1.0"
-description = "A small, replayable Bitcoin mempool data pipeline"
+description = "Bitcoin mempool data pipeline: streaming capture, partitioned Parquet lake with quality checks, SQL analytics, anomaly screening"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = ["websockets==15.0.1"]
@@ -15,6 +15,8 @@ dev = ["pytest==8.4.2", "httpx==0.28.1"]
 kafka = ["confluent-kafka==2.16.0"]
 m1 = ["confluent-kafka==2.16.0", "pyarrow==25.0.0"]
 ml = ["scikit-learn==1.5.0"]
+lake = ["pyarrow==25.0.0"]
+analytics = ["pyarrow==25.0.0", "duckdb==1.5.6"]
 m2 = ["psycopg[binary]==3.3.4", "fastapi==0.117.1", "uvicorn==0.37.0"]
 
 [project.scripts]

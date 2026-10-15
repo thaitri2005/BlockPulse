@@ -49,7 +49,11 @@ runuser -u blockpulse -- $PY -m blockpulse process-pending --root /srv/blockpuls
 rows=$(wc -l < /srv/blockpulse/data/screened/$session/screened.jsonl)
 [[ "$rows" -gt 0 ]] || fail "no screened rows"
 runuser -u blockpulse -- $PY -m blockpulse process-pending --root /srv/blockpulse/data | grep -q '"sessions": \[\]' || fail "second pass not idempotent"
-pass "process-pending as the service user: $rows screened rows, events compacted, second pass is a no-op"
+lake=/srv/blockpulse/data/lake
+[[ -f "$lake/_quality/$session.json" ]] || fail "lake quality report"
+find "$lake/transactions" -name "$session.parquet" | grep -q . || fail "lake transactions partition"
+runuser -u blockpulse -- $PY -c "import pyarrow.dataset as ds; t = ds.dataset('$lake/transactions', partitioning='hive').to_table(); assert t.num_rows > 0, t"     || fail "lake not readable with hive partitioning"
+pass "process-pending as the service user: $rows screened rows, lake partitions + quality report, events compacted, second pass is a no-op"
 
 # 3. Upload through a fake AWS CLI that records its arguments.
 cat > /usr/local/bin/fake-aws <<'EOF'
@@ -63,6 +67,7 @@ for part in raw processed screened; do
     grep -q "s3://test-bucket/data/$part/$session/" /tmp/aws-calls.log || fail "upload of $part"
 done
 grep -q "s3://test-bucket/status/status.json" /tmp/aws-calls.log || fail "status upload"
+grep -q "s3://test-bucket/data/lake/_quality/$session.json" /tmp/aws-calls.log || fail "lake upload"
 [[ -f /srv/blockpulse/data/screened/$session/.uploaded ]] || fail "upload marker"
 pass "sync-pending: raw, processed, screened and status uploaded once, marker written"
 

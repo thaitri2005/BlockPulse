@@ -46,7 +46,7 @@ install -d -m 0755 "$PREFIX" /etc/blockpulse
 
 log "installing the Python package into $PREFIX/venv"
 "$PYTHON" -m venv "$PREFIX/venv"
-"$PREFIX/venv/bin/pip" install --quiet --no-cache-dir --disable-pip-version-check "$APP_DIR"
+"$PREFIX/venv/bin/pip" install --quiet --no-cache-dir --disable-pip-version-check "${APP_DIR}[lake]"
 # The version number doesn't change between code updates, so force the app itself (not its dependencies) to
 # reinstall; otherwise a re-run after uploading a new bundle could keep the old code.
 "$PREFIX/venv/bin/pip" install --quiet --no-cache-dir --disable-pip-version-check --force-reinstall --no-deps "$APP_DIR"

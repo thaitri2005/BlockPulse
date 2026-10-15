@@ -140,10 +140,13 @@ def finished_captures(layout: Layout) -> list[str]:
                   if p.is_dir() and p.name.startswith(SESSION_PREFIX) and ".partial-" not in p.name and _complete(p))
 
 
-def pending_sessions(layout: Layout, *, load_db: bool = False) -> list[str]:
-    """Finished captures not yet screened, plus (when loading) screened sessions not yet in Postgres."""
+def pending_sessions(layout: Layout, *, load_db: bool = False, lake: bool = True) -> list[str]:
+    """Finished captures missing a stage: screening, the lake tables, or (when loading) the Postgres load."""
+    from blockpulse.lake import report_path
     return [name for name in finished_captures(layout)
-            if not _complete(layout.screened / name) or (load_db and not (layout.screened / name / LOADED_MARKER).exists())]
+            if not _complete(layout.screened / name)
+            or (lake and not report_path(layout.root, name).is_file())
+            or (load_db and not (layout.screened / name / LOADED_MARKER).exists())]
 
 
 def _compact_events(processed: Path) -> bool:
@@ -182,13 +185,14 @@ def append_log(layout: Layout, name: str) -> dict:
     return row
 
 
-def process_session(layout: Layout, name: str, *, load_db: bool = False, dsn: str | None = None, compact: bool = True) -> dict:
+def process_session(layout: Layout, name: str, *, load_db: bool = False, dsn: str | None = None, compact: bool = True,
+                    lake: bool = True) -> dict:
     """Bring one finished capture up to date. Each stage runs only if its output is missing."""
     raw = layout.raw / name
     if not _complete(raw):
         raise CollectorError(f"{raw} is not a finished capture")
     processed, screened = layout.processed / name, layout.screened / name
-    done = {"session": name, "processed": False, "screened": False, "loaded": False, "compacted": False}
+    done = {"session": name, "processed": False, "screened": False, "lake": False, "loaded": False, "compacted": False}
     if not _complete(processed):
         _set_aside(processed)
         processed.parent.mkdir(parents=True, exist_ok=True)
@@ -200,6 +204,12 @@ def process_session(layout: Layout, name: str, *, load_db: bool = False, dsn: st
         detect_features(processed / "features.jsonl", screened)
         done["screened"] = True
         append_log(layout, name)
+    if lake:
+        from blockpulse.lake import build_session, report_path
+        if not report_path(layout.root, name).is_file():
+            report = build_session(layout.root, name)
+            done["lake"] = True
+            done["quarantined"] = {table: stats["rows_quarantined"] for table, stats in report["tables"].items()}
     if load_db and not (screened / LOADED_MARKER).exists():
         from blockpulse import db
         from blockpulse.lifecycle import load_events
@@ -240,13 +250,13 @@ class _Lock:
         self.path.unlink(missing_ok=True)
 
 
-def process_pending(layout: Layout, *, load_db: bool = False, dsn: str | None = None) -> dict:
+def process_pending(layout: Layout, *, load_db: bool = False, dsn: str | None = None, lake: bool = True) -> dict:
     """Process every pending session. One failure is recorded and does not stop the others."""
     results, failed = [], []
     with _Lock(layout.root):
-        for name in pending_sessions(layout, load_db=load_db):
+        for name in pending_sessions(layout, load_db=load_db, lake=lake):
             try:
-                results.append(process_session(layout, name, load_db=load_db, dsn=dsn))
+                results.append(process_session(layout, name, load_db=load_db, dsn=dsn, lake=lake))
             except Exception as error:  # keep going; the failure is reported and retried next time
                 failed.append({"session": name, "error": f"{type(error).__name__}: {error}"})
     return {"sessions": results, "failed": failed}
@@ -287,6 +297,9 @@ def sync_pending(layout: Layout, *, bucket: str, prefix: str = "data", aws_comma
             for part in ("raw", "processed", "screened"):
                 run("s3", "cp", "--recursive", "--only-show-errors", "--exclude", UPLOADED_MARKER, "--exclude", LOADED_MARKER,
                     str(layout.root / part / name), f"{destination}/{part}/{name}/")
+            from blockpulse.lake import session_files
+            for path in session_files(layout.root, name):  # partitioned Parquet, quarantine, quality report
+                run("s3", "cp", "--only-show-errors", str(path), f"{destination}/{path.relative_to(layout.root).as_posix()}")
             (screened / UPLOADED_MARKER).write_text(utc_now().isoformat() + "\n", encoding="utf-8")
             uploaded.append(name)
         except CollectorError as error:
