@@ -168,6 +168,7 @@ Verified on 2026-10-15 without an AWS account:
 | Terraform syntax and types | `terraform validate` with AWS provider 6.69.0 | valid |
 | Security and cost properties | `terraform test` with a mocked AWS provider (9 runs: no inbound rules, HTTPS-only egress, IMDSv2, encryption, TLS-only bucket, least-privilege IAM, deadline tag, budget, x86 fallback, Glue partition projection, Athena scan cap and result expiry, input validation) | 9 passed |
 | Bootstrap on Amazon Linux 2023 | `instance_smoke.sh` in the official AL2023 container: Python 3.11 from dnf, package and `pyarrow` from PyPI, install twice, bad deadline refused, processing and lake build as the service user, upload via a fake AWS CLI, deadline logic, SIGINT | 7 passed |
+| Graviton (ARM64), the real instance's architecture | the same smoke test in an emulated ARM64 Amazon Linux 2023 container (`docker run --platform linux/arm64`), including the ARM64 `pyarrow` wheel | 7 passed |
 | The real systemd units | `systemd_e2e.sh` in AL2023 booted with systemd: services start, processing and upload run inside the sandbox, `systemctl stop` is clean, the deadline powers the machine off | all passed |
 | Unit files | `systemd-analyze verify`, `systemd-analyze security` | clean; exposure 1.4 |
 | Shell scripts, rendered user data | shellcheck 0.10 | clean |
