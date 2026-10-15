@@ -27,6 +27,8 @@ docker compose --profile m2 up -d --wait          # Postgres + Grafana (~900 MB)
 
 Rebuild the whole M3 chain and compare with the recorded artifacts: `powershell -File scripts/reproduce_m3.ps1`. The champion detector is in `data/detectors/registry.jsonl` (`blockpulse detectors status`); the rules are champion until a model clears the gate.
 
+Unattended collection: `scripts/install_collector.ps1` (hourly Task Scheduler job; see docs/M4_COLLECTION.md). The Airflow DAG in `orchestration/airflow/` has never been run.
+
 The live WebSocket needs `--url wss://node203.sv1.mempool.space/api/v1/ws`, because the default host times out from this network. The agent runtime may be blocked from public WebSockets entirely; ask the user to run live captures from their own shell.
 
 ## Conventions

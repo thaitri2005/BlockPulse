@@ -3,7 +3,7 @@
 | Document field | Value |
 | --- | --- |
 | Status | M0, M1, M2, and M3 complete locally; M4 (reliable local release) is next |
-| Version | 1.8 |
+| Version | 1.9 |
 | Created / last updated | 2026-10-08 / 2026-10-14 |
 | Intended builder | One developer working part-time |
 | Primary environment | Local machine; containers before Kubernetes |
@@ -948,6 +948,7 @@ These are proposed defaults for the first implementation. Change them when evide
 | D11 | Core completion precedes Kubernetes/cloud | Ensure infrastructure expands a working project |
 | D12 | Cloud runs are temporary | Learn deployment and cost without a recurring hosting commitment |
 | D13 | The rule baseline stays champion until a model clears a recorded promotion gate | Decided 2026-10-14 ([M3 report](M3_REPORT.md)); revisit with more data, labels, or a better model |
+| D15 | Unattended collection runs hourly via Windows Task Scheduler; Airflow is optional | Decided 2026-10-15: same steps, no extra RAM, no image download. The Airflow DAG exists but is unverified ([collection](M4_COLLECTION.md)) |
 | D14 | Local append-only detector registry instead of MLflow | Same register/promote/rollback operations without another service; revisit with several models or collaborators |
 
 When a choice becomes implementation-critical, add a short decision note with context, alternatives, chosen behavior, consequences, and evidence. Keep superseded notes for history; update this document to show the current choice.
@@ -967,6 +968,22 @@ When a choice becomes implementation-critical, add a short decision note with co
 | Too many services slow delivery | Review milestone scope before adding services | Turn off optional profiles; consolidate application workers |
 | Cloud quote exceeds the envelope | Price the selected profile | Shorten the run, simplify it, or skip cloud |
 | Part-time schedule slips | Re-estimate at milestone boundaries | Finish the current release boundary before adding an extension |
+
+### 20.1 Feasibility check after M3 (2026-10-15)
+
+Question asked: do the M3 findings threaten the project? **No.** What they show is that the model comparison needs more data and labels, not that the project's design is wrong.
+
+| Finding | Effect on feasibility |
+| --- | --- |
+| The Isolation Forest failed three of four promotion criteria; the rules stay champion | None. The plan listed "baseline stays champion" as an acceptable outcome. The core deliverable is a reproducible pipeline with an honest evaluation, and that exists. |
+| Threshold rate moved 2.6x between two windows | A data problem. Calibration needs many windows across hours and days; one day of continuous collection gives dozens. |
+| No independent labels | Real limit, and more traffic does not fix it. Conclusions stay about detector behavior and agreement, never accuracy. A small hand-reviewed sample is the only route to labels. |
+| Only about 45 minutes of data so far | Not a calendar problem. Measured traffic is about 3,300 added transactions per 10 minutes, so about 480,000 a day against 15,515 collected so far. Continuous collection reaches useful volume in one to three days. Covering a weekend needs a weekend, and no engineering shortcut changes that. |
+| Disk | The binding resource. One hour of capture plus processing is about 330 MB uncompressed, about 8 GB a day, against about 62 GB free. Compression and a free-space guard are needed (see [collection](M4_COLLECTION.md)); a few days fits, a month does not. |
+| Public feed drops every few minutes (ping timeouts) and the reconnect limit is per capture, not per connection | A real operational limit: long captures must allow many reconnects, and coverage will always have small gaps that are recorded as a lower bound. |
+| Environment is a reused system Python with a SciPy/NumPy mismatch | Small risk, one afternoon to fix with a pinned clean venv. |
+
+Realistic remaining effort: a few days of unattended collection (calendar time, but not working time), one rebuild-and-retrain pass on the larger data, then M4. The month-long timelines in this plan's original estimates were for a more cautious part-time pace and are not required for a local release.
 
 The first unknowns to settle are actual hardware, available weekly time, provider capabilities/request budget, desired observation volume, and measured local disk growth. None prevents documenting the idea now.
 
@@ -1039,6 +1056,7 @@ Resources still running, if any:
 | 2026-10-09 | 0.8 | Started M1 with a pinned local Kafka broker profile, capture replay producer, restart-safe JSONL archive consumer, and broker-independent tests |
 | 2026-10-09 | 0.9 | Verified the 402-message raw Kafka round trip, exact processed feature/event records, and repeat-consumer behavior |
 | 2026-10-09 | 1.0 | Completed capture-to-Kafka, bounded enrichment, error topic, Zstandard Parquet archival, offset-safe restart behavior, throughput/lag summaries, and the full M1 local integration (62 passed, 1 skipped) |
+| 2026-10-15 | 1.9 | Post-M3 feasibility check (section 20.1); unattended hourly collection via Windows Task Scheduler (verified on a saved capture) and an Airflow DAG with Compose service (written, not run: image download failed); disk guard and events compaction |
 | 2026-10-14 | 1.8 | Completed M3: detector bundles with reference percentiles and evidence checksums, append-only registry with promotion gate and rollback, reproduction script (6 of 6 checks), and the detection report; rules stay champion |
 | 2026-10-14 | 1.7 | M3.4: seeded, internally consistent synthetic transaction sweep (fan-in, fan-out, equal outputs, fee outliers) with benign controls; rules and calibrated model compared by pattern and severity |
 | 2026-10-14 | 1.6 | M3.3: alert-budget threshold calibration, single-pass test scoring, agreement with the rules, descriptive most-unusual-feature context, and the first evaluation report with its limits |

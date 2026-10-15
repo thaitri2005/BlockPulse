@@ -63,6 +63,7 @@ See the [M2 guide](docs/M2_POSTGRES.md) to load the real capture, run the API at
 | [M3 evaluation](docs/M3_EVALUATION.md) | Alert-budget thresholds and comparing the model with the rules |
 | [M3 registry](docs/M3_REGISTRY.md) | Detector bundles, promotion gate, and rollback |
 | [M3 report](docs/M3_REPORT.md) | What the evidence supports and the champion decision |
+| [Data collection](docs/M4_COLLECTION.md) | Unattended hourly capture (Task Scheduler, optional Airflow) |
 | [Review rubric](docs/PHASE1_REVIEW_RUBRIC.md) | Review flagged rows without over-claiming |
 | [Experiments](docs/experiments/) | Dated measurements and evidence behind each claim |
 | [CLAUDE.md](CLAUDE.md) | Working conventions for AI-assisted sessions |
