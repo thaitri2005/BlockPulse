@@ -43,9 +43,8 @@ The live WebSocket needs `--url wss://node203.sv1.mempool.space/api/v1/ws`, beca
 
 - **Never run `terraform apply` or `destroy`, or create anything in AWS, from an agent session.** Prepare and test; the owner deploys (decision D17).
 - Files that run on Linux (`*.sh`, systemd units, `*.tf`, templates) must have LF line endings. Python's `write_text` on Windows writes CRLF unless you pass `newline="\n"`; `.gitattributes` and the bundle builder guard against it.
-
 - `data/` is git-ignored local evidence. Never delete or overwrite run directories; commands create new ones.
-- Tests must not hit the public API. Postgres tests drop the `public` schema: only ever point `BLOCKPULSE_TEST_DSN` at `blockpulse_test`.
+- Postgres tests drop the `public` schema: only ever point `BLOCKPULSE_TEST_DSN` at `blockpulse_test`.
 - Schema changes are new numbered files in `src/blockpulse/migrations/`; never edit an applied one.
 - The lake contract in `src/blockpulse/lake.py` is the single schema source. After changing it, regenerate `infra/aws/terraform/lake_schema.json` with `python -m blockpulse lake-schema --output infra/aws/terraform/lake_schema.json` (a test fails otherwise) and bump `LAKE_SCHEMA_VERSION` if existing files become incompatible.
 - SQL in `analytics/queries/` must run in both DuckDB and Athena (Trino): stick to standard SQL, and test with `blockpulse lake-query`.
