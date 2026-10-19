@@ -14,7 +14,7 @@ A flag means *unusual structure*. It is not a fraud probability or evidence of w
 | **SQL analytics** | The same queries in DuckDB and Athena; Glue partition projection, 1 GiB scan cap | Shared queries run locally and in Athena ([05](docs/guides/05-lake-and-athena.md)) |
 | **Serving** | Postgres with duplicate-safe loads and lifecycle projection, read-only API, Grafana dashboard | Re-loading adds no rows; dashboard queries verified ([04](docs/guides/04-postgres-api-dashboard.md)) |
 | **Reproducible evaluation** | Checksummed manifests with chronological splits, Isolation Forest, threshold calibration, synthetic sweep, gated detector registry | Two recorded runs rebuild exactly (6 of 6 checks); rules stay champion on 2.65 M rows ([06](docs/guides/06-ml-evaluation.md)) |
-| **Testing and CI** | 127 pytest tests, Terraform tests with a mocked AWS provider, Amazon Linux 2023 + systemd rehearsals, GitHub Actions | All green on GitHub Actions ([workflow](.github/workflows/ci.yml)) |
+| **Testing and CI** | A hashed lock file for every dependency, 127 pytest tests, Terraform tests with a mocked AWS provider, Amazon Linux 2023 + systemd rehearsals, GitHub Actions | All green on GitHub Actions ([workflow](.github/workflows/ci.yml)) |
 
 **Not done yet:** a replay load test and failure drills, a pinned clean environment, dbt models, an Airflow backfill DAG, and Kubernetes. No accuracy figures exist, because there are no labels. See the [plan](docs/PROJECT_PLAN.md) for status and order.
 
@@ -24,7 +24,8 @@ Python 3.11+. Docker only for the Kafka and Postgres parts.
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[all]"
+.\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements.lock   # every dependency pinned and hashed
+.\.venv\Scripts\python.exe -m pip install --no-deps -e .
 .\.venv\Scripts\python.exe -m pytest -q
 .\.venv\Scripts\python.exe -m blockpulse process examples/fixtures/mempool_messages.jsonl
 ```

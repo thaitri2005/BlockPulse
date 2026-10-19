@@ -39,6 +39,17 @@ bash infra/aws/tests/run_container_tests.sh       # from the repo root: Amazon L
 
 The live WebSocket needs `--url wss://node203.sv1.mempool.space/api/v1/ws`, because the default host times out from this network. The agent runtime may be blocked from public WebSockets entirely; ask the user to run live captures from their own shell.
 
+## Dependencies
+
+`pyproject.toml` declares direct dependencies; `requirements.lock` pins every package with hashes for Windows and Linux. The venv is isolated (no system site-packages). After changing `pyproject.toml`:
+
+```powershell
+.\.venv\Scripts\python.exe -m uv pip compile pyproject.toml --extra all --universal --python-version 3.11 --generate-hashes --no-header --annotation-style line -o requirements.lock
+.\.venv\Scripts\python.exe -m uv pip sync requirements.lock; .\.venv\Scripts\python.exe -m uv pip install --no-deps -e .
+```
+
+CI fails if the lock doesn't match `pyproject.toml`. The AWS bundle ships the same pins as `constraints.txt`.
+
 ## Conventions
 
 - **Never run `terraform apply` or `destroy`, or create anything in AWS, from an agent session.** Prepare and test; the owner deploys (decision D17).

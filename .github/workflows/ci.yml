@@ -36,8 +36,15 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install
-        run: pip install -e ".[dev,m1,m2,ml,analytics]" "shellcheck-py==0.10.0.1"
+      - name: Lock file matches pyproject.toml
+        run: |
+          pip install "uv==0.12.10"
+          uv pip compile pyproject.toml --extra all --universal --python-version 3.11 --generate-hashes --no-header --annotation-style line -q -o /tmp/expected.lock
+          diff -u requirements.lock /tmp/expected.lock
+      - name: Install (exactly the locked versions)
+        run: |
+          pip install --require-hashes -r requirements.lock
+          pip install --no-deps -e .
       - name: Test
         run: pytest -q
 

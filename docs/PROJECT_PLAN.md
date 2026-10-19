@@ -24,7 +24,7 @@ What the project will not claim:
 | M3 · ML evaluation | Done | Rules stay champion; Isolation Forest fails 2 of 4 gate criteria on 2.65 M rows ([06](guides/06-ml-evaluation.md)) |
 | DE1–DE2 · Lake and Athena | Done | Partitioned Parquet, quality gate (0 of 8.5 M rows quarantined across 94 sessions), same SQL in DuckDB and Athena ([05](guides/05-lake-and-athena.md)) |
 | E3a · AWS collector | Done | 89 h, 0 failures, 2.65 M transactions, about $0.80, torn down ([08](guides/08-aws.md)) |
-| DE3 · Proof artifacts | **In progress** | Done: model splits read from the lake (3.4x faster, identical rows), declared row order, `verify-dataset`, reproduction for growing data. CI green on GitHub (2026-10-20; the first run caught an undeclared `pytz` dependency). Open: pinned environment, load test, failure drills |
+| DE3 · Proof artifacts | **In progress** | Done: model splits read from the lake (3.4x faster, identical rows), declared row order, `verify-dataset`, reproduction for growing data. CI green on GitHub (2026-10-20; the first run caught an undeclared `pytz` dependency). Clean pinned environment (2026-10-20): hashed `requirements.lock` for every dependency, isolated venv, CI installs from the lock and fails if it's stale, the AWS bundle ships the same pins; both recorded runs still reproduce 6 of 6. Open: load test, failure drills |
 | DE4–DE6 | Planned | See the roadmap |
 
 Tests (2026-10-20): 127 passed and 1 optional skip with the Postgres test database; Terraform 9 of 9 with a mocked provider; Amazon Linux 2023 container rehearsals all pass.
@@ -49,7 +49,7 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 
 **Next session:**
 
-1. DE3: a clean pinned environment (lock file), then the replay load test and failure drills.
+1. DE3: the replay load test, then failure drills.
 2. DE4: dbt.
 
 ## 4. Decisions
@@ -83,7 +83,7 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 | Gate decisions near a boundary move with the training sample | Check across seeds before promoting |
 | The public feed drops every few minutes | Long captures allow 300 reconnects; gaps are recorded as a lower bound |
 | Disk: about 4–5 GB a day of collection | Free-space guard (stops below 15 GiB); compaction; raw stays as source of truth |
-| Development venv reuses system packages (SciPy/NumPy mismatch warnings) | DE3: clean pinned environment; models record library versions |
+| Dependency drift (system numpy changed between two runs before the lock) | Hashed lock, isolated venv, CI lock check; models record library versions |
 | A cloud run keeps billing | Deadline poweroff, budget alert, bucket expiry, teardown checklist ([08](guides/08-aws.md)) |
 | Too many services slow delivery | Compose profiles; stop what isn't in use |
 

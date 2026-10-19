@@ -4,6 +4,7 @@ import importlib.util
 import re
 import shutil
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
@@ -33,8 +34,11 @@ def test_bundle_is_reproducible_complete_and_linux_safe(tmp_path):
         names = set(bundle.namelist())
         required = {"pyproject.toml", "README.md", "src/blockpulse/cli.py", "src/blockpulse/collector.py",
                     "src/blockpulse/migrations/001_initial.sql", "infra/aws/instance/install.sh",
-                    "infra/aws/instance/deadline-check.sh", "infra/aws/instance/systemd/blockpulse-collect.service"}
+                    "infra/aws/instance/deadline-check.sh", "infra/aws/instance/systemd/blockpulse-collect.service",
+                    "constraints.txt"}
         assert required <= names
+        constraints = bundle.read("constraints.txt").decode("utf-8")
+        assert "--hash" not in constraints and "pyarrow==" in constraints and "numpy==" in constraints
         assert not any("__pycache__" in n or n.endswith(".pyc") or n.startswith("data/") for n in names)
         for name in names:
             assert b"\r\n" not in bundle.read(name), f"{name} has Windows line endings"
@@ -66,9 +70,13 @@ def test_user_data_template_renders_every_placeholder():
     assert set(re.findall(r"\$\{(\w+)\}", TEMPLATE.read_text(encoding="utf-8"))) == set(TEMPLATE_VARS)
 
 
-@pytest.mark.skipif(shutil.which("shellcheck") is None, reason="shellcheck not installed")
+# The dev extra installs shellcheck next to the interpreter, which may not be on PATH if the venv isn't activated.
+SHELLCHECK = shutil.which("shellcheck") or shutil.which("shellcheck", path=str(Path(sys.executable).parent))
+
+
+@pytest.mark.skipif(SHELLCHECK is None, reason="shellcheck not installed")
 def test_rendered_user_data_passes_shellcheck(tmp_path):
     script = tmp_path / "user-data.sh"
     script.write_text(render(TEMPLATE.read_text(encoding="utf-8"), TEMPLATE_VARS), encoding="utf-8", newline="\n")
-    result = subprocess.run(["shellcheck", str(script)], capture_output=True, text=True)
+    result = subprocess.run([SHELLCHECK, str(script)], capture_output=True, text=True)
     assert result.returncode == 0, result.stdout

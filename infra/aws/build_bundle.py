@@ -43,6 +43,20 @@ def collect_files(root: Path = ROOT) -> list[tuple[str, Path]]:
     return sorted(files)
 
 
+def constraints_from_lock(lock_text: str) -> bytes:
+    """requirements.lock without hashes, as a pip constraints file (pip rejects hashes in constraints).
+
+    The instance installs with `-c constraints.txt`, so it gets exactly the locked versions.
+    """
+    lines = []
+    for line in lock_text.splitlines():
+        if not line or line[0] in " #-":
+            continue  # hash continuation lines, comments, options
+        lines.append(line.rstrip(" \\").split("  #")[0].rstrip())
+    header = "# Generated from requirements.lock by build_bundle.py"
+    return "\n".join([header, *lines, ""]).encode("utf-8")
+
+
 def build(output: Path = DEFAULT_OUTPUT, root: Path = ROOT) -> dict:
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(".zip.tmp")
@@ -56,6 +70,12 @@ def build(output: Path = DEFAULT_OUTPUT, root: Path = ROOT) -> dict:
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = (0o755 if path.suffix == ".sh" else 0o644) << 16
             bundle.writestr(info, data)
+        lock = root / "requirements.lock"
+        if lock.is_file():
+            info = zipfile.ZipInfo("constraints.txt", date_time=FIXED_TIME)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = 0o644 << 16
+            bundle.writestr(info, constraints_from_lock(lock.read_text(encoding="utf-8")))
     temporary.replace(output)
     digest = hashlib.sha256(output.read_bytes()).hexdigest()
     return {"bundle": str(output), "files": len(entries), "bytes": output.stat().st_size, "sha256": digest}
