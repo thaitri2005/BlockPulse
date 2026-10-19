@@ -21,23 +21,6 @@ def _log(event, **fields):
     print(json.dumps(row, separators=(",", ":"), allow_nan=False), file=sys.stderr, flush=True)
 
 
-def _produce_wait(producer, topic, key, value):
-    errors = []
-    encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
-    def delivered(error, _message):
-        if error is not None:
-            errors.append(str(error))
-    while True:
-        try:
-            producer.produce(topic, key=key.encode("utf-8"), value=encoded, on_delivery=delivered)
-            break
-        except BufferError:
-            producer.poll(0.1)
-    remaining = producer.flush(30)
-    if remaining or errors:
-        raise RuntimeError(f"Kafka publish to {topic} failed: {remaining} pending; {errors[:3]}")
-
-
 def _consumer_lag(consumer):
     try:
         positions = consumer.position(consumer.assignment())
@@ -61,14 +44,25 @@ def enrich_topic(
     max_messages=None,
     idle_timeout=3.0,
     assignment_timeout=30.0,
+    commit_every=500,
+    commit_interval=1.0,
 ):
-    """Consume raw envelopes, enrich incomplete additions, publish, then commit input offsets."""
+    """Consume raw envelopes, enrich incomplete additions, publish, then commit input offsets.
+
+    Output is produced without waiting. Every `commit_every` messages or `commit_interval` seconds (and at the end)
+    the worker flushes the producer, checks that every record was acknowledged, and only then commits the input
+    offsets it has processed. A crash before a checkpoint means those messages are processed again: at-least-once,
+    never loss. Waiting for each record and committing per message was measured at 86 messages/s
+    (docs/guides/09-load-test.md); batching removes that round trip from the per-message path.
+    """
     if not group_id or not group_id.strip():
         raise ValueError("group_id is required")
     if max_messages is not None and (type(max_messages) is not int or max_messages <= 0):
         raise ValueError("max_messages must be a positive integer")
     if type(idle_timeout) not in (int, float) or idle_timeout <= 0:
         raise ValueError("idle_timeout must be greater than zero")
+    if type(commit_every) is not int or commit_every <= 0:
+        raise ValueError("commit_every must be a positive integer")
     Producer, Consumer, _, _ = _kafka_types()
     consumer = (consumer_factory or Consumer)({
         "bootstrap.servers": bootstrap_servers, "group.id": group_id,
@@ -85,9 +79,39 @@ def enrich_topic(
     messages = events = failures = requests = enriched_count = 0
     offsets = {}
     final_lag = None
+    delivery_errors = []
+    pending = {}  # partition -> last processed message, not yet committed
+    last_checkpoint = time.monotonic()
+    since_checkpoint = 0
+
+    def delivered(error, _message):
+        if error is not None:
+            delivery_errors.append(str(error))
+
+    def produce(topic, key, value):
+        encoded = json.dumps(value, ensure_ascii=False, separators=(",", ":"), allow_nan=False).encode("utf-8")
+        while True:
+            try:
+                producer.produce(topic, key=key.encode("utf-8"), value=encoded, on_delivery=delivered)
+                return
+            except BufferError:
+                producer.poll(0.1)  # local queue full: serve delivery callbacks, then retry
+
+    def checkpoint():
+        nonlocal last_checkpoint, since_checkpoint
+        remaining = producer.flush(30)
+        if remaining or delivery_errors:
+            raise RuntimeError(f"Kafka publish failed before commit: {remaining} pending; {delivery_errors[:3]}")
+        for message in pending.values():
+            consumer.commit(message=message, asynchronous=False)
+        pending.clear()
+        last_checkpoint, since_checkpoint = time.monotonic(), 0
     _log("kafka_enrichment_started", group_id=group_id, topic=RAW_TOPIC, output_topic=ENRICHED_TOPIC)
     try:
         while max_messages is None or messages < max_messages:
+            if since_checkpoint and (since_checkpoint >= commit_every
+                                     or time.monotonic() - last_checkpoint >= commit_interval):
+                checkpoint()
             message = consumer.poll(0.25)
             if message is None:
                 now = time.monotonic()
@@ -107,12 +131,13 @@ def enrich_topic(
             try:
                 row = _decode_envelope(message.value(), message.offset() + 1)
             except ValueError as error:
-                _produce_wait(producer, ERROR_TOPIC, f"{message.partition()}:{message.offset()}", {
+                produce(ERROR_TOPIC, f"{message.partition()}:{message.offset()}", {
                     "schema_version": 1, "stage": "enrichment", "kind": "invalid_raw_envelope",
                     "partition": message.partition(), "offset": message.offset(), "detail": str(error),
                     "value_base64": base64.b64encode(message.value() or b"").decode("ascii"),
                 })
-                consumer.commit(message=message, asynchronous=False)
+                pending[message.partition()] = message
+                since_checkpoint += 1
                 messages += 1
                 failures += 1
                 offsets[str(message.partition())] = max(offsets.get(str(message.partition()), -1), message.offset())
@@ -120,15 +145,16 @@ def enrich_topic(
                 continue
             enriched, record_errors = enricher.process(row)
             key = str(row.get("session_id") or row.get("run_id") or row["message_id"])
-            _produce_wait(producer, ENRICHED_TOPIC, key, enriched)
+            produce(ENRICHED_TOPIC, key, enriched)
             for issue in record_errors:
                 error_record = {
                     "schema_version": 1, "stage": "enrichment",
                     "source_message_id": row["message_id"], "run_id": row.get("run_id"),
                     "received_at": row.get("received_at"), **issue,
                 }
-                _produce_wait(producer, ERROR_TOPIC, key, error_record)
-            consumer.commit(message=message, asynchronous=False)
+                produce(ERROR_TOPIC, key, error_record)
+            pending[message.partition()] = message
+            since_checkpoint += 1
             messages += 1
             events += len(enriched["events"])
             failures += len(record_errors)
@@ -136,6 +162,7 @@ def enrich_topic(
             enriched_count += enriched["enrichment_summary"]["enriched"]
             offsets[str(message.partition())] = max(offsets.get(str(message.partition()), -1), message.offset())
             idle_since = None
+        checkpoint()  # normal exit: everything processed is flushed, acknowledged, then committed
     finally:
         final_lag = _consumer_lag(consumer)
         consumer.close()
