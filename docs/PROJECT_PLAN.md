@@ -735,12 +735,12 @@ Keep a cost worksheet with region, service/SKU, quantity, unit rate, planned hou
 
 | Service / SKU | Quantity | Unit rate | Estimate | Actual |
 | --- | --- | --- | ---: | ---: |
-| EC2 t4g.small on-demand | 96 h | $0.0168/h | $1.61 | (record after run) |
-| Public IPv4 | 96 h | $0.005/h | $0.48 | |
-| EBS gp3 | 40 GB for 96 h | about $0.08/GB-month | $0.42 | |
-| S3 storage and requests | up to about 20 GB, a few thousand PUTs | $0.023/GB-month | about $0.10 | |
+| EC2 t4g.small on-demand | 96 h | $0.0168/h | $1.61 | $0.00 (Free plan allowance) |
+| Public IPv4 | 96 h | $0.005/h | $0.48 | $0.41 |
+| EBS gp3 | 40 GB for 96 h | about $0.08/GB-month | $0.42 | $0.34 |
+| S3 storage and requests | up to about 20 GB, a few thousand PUTs | $0.023/GB-month | about $0.10 | $0.04 |
 | Data transfer out (download) | about 20 GB | first 100 GB/month free | $0 to $1.80 | |
-| **Total** | | | **about $2.60 to $4.40** | |
+| **Total** | | | **about $2.60 to $4.40** | **about $0.80**, all covered by credits (Cost Explorer, 2026-10-19; billing lags about a day) |
 
 Well inside the $15 aim. After the deadline the stopped instance's disk and the bucket keep billing (about $3.20/month for the disk) until `terraform destroy`.
 
@@ -1069,16 +1069,15 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 | E1: entity analysis | Deferred | Optional; gate on data coverage and memory |
 | E2: Kubernetes/networking | Deferred | Optional; gate on completed local core |
 | DE1-DE2: lake and Athena | Done | [Lake guide](LAKE.md): partitioned Parquet with a quality gate (0 of 57,857 real rows quarantined), four shared queries run on the real lake in DuckDB; Glue tables with partition projection, scan-capped Athena workgroup and saved queries in Terraform (tested with a mocked provider) |
-| E3: AWS experiment | E3a ran; teardown pending | 89 hourly sessions, 0 failures, 2.65 M scored transactions over a weekend; 17.9 GB downloaded and verified. M3 rerun: test alert rate 1.15x budget (was 2.62x), benign flags 5.6% (was 43%); gate still fails 2 of 4, rules stay champion ([rerun report](experiments/2026-10-19-m3-rerun-aws-data.md)) |
+| E3: AWS experiment | E3a complete | Ran 2026-10-15 to 2026-10-19: 89 hourly sessions, 0 failures, 2.65 M scored transactions; 17.9 GB downloaded and verified byte for byte; all 30 resources destroyed and checked (no buckets, VPCs, volumes, IPs, roles left); actual cost about $0.80, covered by credits. Destroy hit a provider bug listing the full bucket (`token too long`); emptied with `aws s3 rm --recursive`, then destroy finished. M3 rerun: [report](experiments/2026-10-19-m3-rerun-aws-data.md) |
 
 Test suite on 2026-10-16: 119 passed and 1 skipped with `BLOCKPULSE_TEST_DSN` set (the skip is the optional loopback test); 105 passed and 15 skipped without it. Terraform: 9 passed. Container rehearsals: all passed.
 
 **Next session, in order:**
 
-1. **Confirm the AWS teardown** (owner): `terraform apply -var bucket_force_destroy=true`, then `terraform destroy` in `infra/aws/terraform`; check nothing tagged `Project=blockpulse` remains and record the actual cost in Section 15.2. Data is already downloaded and verified (17.9 GB).
-2. **DE3:** clean pinned environment, push to GitHub so CI runs, replay load test and failure drills. Read splits from the Parquet lake to cut the M3 chain from about 35 minutes to a few.
-3. **DE4:** dbt models and tests on the lake.
-4. Decide an alert budget; consider a fee-rate-relative feature (see the [rerun report](experiments/2026-10-19-m3-rerun-aws-data.md)).
+1. **DE3:** clean pinned environment, push to GitHub so CI runs, replay load test and failure drills. Read splits from the Parquet lake to cut the M3 chain from about 35 minutes to a few.
+2. **DE4:** dbt models and tests on the lake.
+3. Decide an alert budget; consider a fee-rate-relative feature (see the [rerun report](experiments/2026-10-19-m3-rerun-aws-data.md)).
 
 **Housekeeping:** Kafka (up to 1 GiB), Postgres (512 MB), and Grafana (384 MB) are separate Compose profiles. Stop what you aren't using (`docker compose --profile m1 stop`, `docker compose --profile m2 stop`); data volumes persist.
 

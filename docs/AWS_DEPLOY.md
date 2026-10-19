@@ -196,4 +196,5 @@ Run all the local checks yourself with `bash infra/aws/tests/run_container_tests
 | Session Manager can't connect | The SSM agent needs a few minutes after boot; check the instance is running and the role has `AmazonSSMManagedInstanceCore` |
 | Capture log shows `retry_limit` or 0 messages | The feed was unreachable; the loop waits a minute and starts a new session. Try another `source_url` if it persists |
 | `terraform destroy` fails on the bucket | It still has data: download it, then `terraform apply -var bucket_force_destroy=true` and destroy again |
+| Destroy fails with `ListObjectVersions ... bufio.Scanner: token too long` | A Terraform AWS provider bug when emptying a bucket with many objects. Empty it with `aws s3 rm s3://<bucket> --recursive`, then `terraform destroy` again (happened on 2026-10-19) |
 | Instance is `stopped` | Normal after the deadline. Download the data, then destroy |
