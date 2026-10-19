@@ -72,6 +72,10 @@ Flags are structural rule matches, not evidence of wrongdoing.
 
 Open the Athena console, choose the `blockpulse-lake` workgroup and the `blockpulse_lake` database, and run a saved query. Or from the command line: `terraform output -raw athena_example_command`. Filter on `dt` (and `hour`) to scan less: Athena charges about $5 per TB scanned, so these queries cost fractions of a cent.
 
+## The lake feeds the models too
+
+`load_split` (training, evaluation, sweeps, packaging) reads each session from its Parquet partitions when the session's quality report matches the manifest, reading only the columns it needs and only `txid` for sessions outside the requested split. On the 527k-row test split that is 31 s against 105 s from JSONL, with identical rows. Pass `source="jsonl"` for a strict checksum-verified read. Details and the row-order rule: [rerun report addendum](experiments/2026-10-19-m3-rerun-aws-data.md#addendum-reading-splits-from-the-lake-de3-same-day).
+
 ## Limits
 
 - The lake is rebuilt per session, not per row; editing one row means rebuilding its session (which is cheap and idempotent).

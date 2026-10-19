@@ -24,9 +24,11 @@ function Check($name, $recorded, $rebuilt) {
     $script:checks += [pscustomobject]@{ check = $name; matches = ("$recorded" -eq "$rebuilt"); recorded = "$recorded"; rebuilt = "$rebuilt" }
 }
 
-# 1. The manifest: rebuild from the screened sessions, which must give the same content hash.
-& $py -m blockpulse build-dataset --output "$out/dataset.json" | Out-Null
-Check "manifest_id" (Read-Json $Manifest).manifest_id (Read-Json "$out/dataset.json").manifest_id
+# 1. The manifest: its ID must match its content and every screened file it names must be unchanged.
+#    (Rebuilding from the folder would pick up sessions collected later and give a different manifest.)
+New-Item -ItemType Directory -Force $out | Out-Null
+& $py -m blockpulse verify-dataset $Manifest > "$out/verify.json"
+Check "manifest_intact" "True" ((Get-Content "$out/verify.json" -Raw | ConvertFrom-Json).ok)
 
 # 2. The model, trained again from the manifest with the same seed.
 & $py -W ignore -m blockpulse train-iforest $Manifest --seed $Seed --output "$out/$modelName" | Out-Null

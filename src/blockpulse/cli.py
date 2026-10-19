@@ -103,6 +103,9 @@ def main(argv: list[str] | None = None) -> int:
     trace.add_argument("txid")
     trace.add_argument("--capture", type=Path, help="The messages.jsonl the data was loaded from")
     trace.add_argument("--brief", action="store_true", help="Print a short human summary instead of the full JSON")
+    verify_dataset = commands.add_parser("verify-dataset", help="Check a recorded manifest is intact and its files unchanged")
+    verify_dataset.add_argument("manifest", type=Path)
+    verify_dataset.add_argument("--root", type=Path, default=Path("data/screened"))
     build_dataset = commands.add_parser("build-dataset", help="Build a checksummed chronological train/calibration/test manifest from screened sessions")
     build_dataset.add_argument("--root", type=Path, default=Path("data/screened"), help="Directory of screened run folders")
     build_dataset.add_argument("--output", type=Path, help="Manifest path; default data/datasets/dataset-<id>.json")
@@ -290,6 +293,11 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(json.dumps(summary, indent=2, default=str))
             return 0 if check is None or check["matches_stored_features"] is not False else 4
+        elif args.command == "verify-dataset":
+            from blockpulse.dataset import verify_manifest
+            output = None
+            summary = verify_manifest(json.loads(args.manifest.read_text(encoding="utf-8")), args.root)
+            code = 0 if summary["ok"] else 4
         elif args.command == "build-dataset":
             from blockpulse.dataset import build_manifest, write_manifest
             output = None

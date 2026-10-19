@@ -16,6 +16,7 @@ from blockpulse.features import FEATURE_SET_VERSION
 SPLITS = ("train", "calibration", "test")
 DEFAULT_FRACTIONS = (0.6, 0.2, 0.2)
 MANIFEST_SCHEMA = 1
+CANONICAL_ROW_ORDER = "session order, then received_at, then txid"
 
 
 def sha256_file(path: Path) -> str:
@@ -155,7 +156,7 @@ def build_manifest(root: Path, *, min_rows: int = 100, fractions=DEFAULT_FRACTIO
             "target_fractions": dict(zip(SPLITS, fractions)), "min_rows": min_rows,
             "cut_rule": "cut points whose row shares are closest to the targets; every split non-empty",
             "duplicate_policy": "a txid already seen in an earlier session is dropped from later sessions when loading",
-            "random_seed": None, "sampling_fraction": 1.0,
+            "random_seed": None, "sampling_fraction": 1.0, "row_order": CANONICAL_ROW_ORDER,
         },
         "splits": splits, "sessions": sessions, "excluded": excluded,
         "limitations": [
@@ -164,8 +165,25 @@ def build_manifest(root: Path, *, min_rows: int = 100, fractions=DEFAULT_FRACTIO
             "Rows carry rule outputs but no independent labels; no accuracy claim can be made.",
         ],
     }
-    manifest_id = hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
-    return {"manifest_id": manifest_id, **body}
+    return {"manifest_id": _content_id(body), **body}
+
+
+def _content_id(body: dict) -> str:
+    return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def verify_manifest(manifest: dict, root: Path) -> dict:
+    """Check a recorded manifest is intact (its ID matches its content) and every file it names is unchanged.
+
+    This is the reproducibility check that still works after new sessions arrive: rebuilding a manifest from the
+    folder would include them and give a different (correct, but different) manifest.
+    """
+    body = {k: v for k, v in manifest.items() if k != "manifest_id"}
+    changed = [s["run_id"] for s in manifest["sessions"]
+               if not (root / s["screened_file"]).is_file() or sha256_file(root / s["screened_file"]) != s["screened_sha256"]]
+    return {"manifest_id": manifest["manifest_id"], "content_matches_id": _content_id(body) == manifest["manifest_id"],
+            "sessions": len(manifest["sessions"]), "changed_or_missing": changed,
+            "ok": _content_id(body) == manifest["manifest_id"] and not changed}
 
 
 def write_manifest(manifest: dict, path: Path) -> bool:
@@ -180,13 +198,57 @@ def write_manifest(manifest: dict, path: Path) -> bool:
     return True
 
 
-def load_split(manifest: dict, split: str, root: Path) -> list[dict]:
-    """Read one split's rows, verifying each file's checksum and applying the duplicate policy.
+SPLIT_SOURCES = ("auto", "jsonl", "lake")
+LAKE_FEATURE_COLUMNS = ("n_in", "n_out", "value_out_sat", "fee_sat", "vsize", "fee_rate_sat_vb",
+                        "max_equal_output_count", "round_amount_fraction", "rbf_signaled")
 
-    `root` is the directory holding the session folders (the same one given to build_manifest).
+
+def load_split(manifest: dict, split: str, root: Path, *, source: str = "auto") -> list[dict]:
+    """Read one split's rows and apply the duplicate policy (a txid seen in an earlier session is dropped).
+
+    `root` is the screened folder given to build_manifest; the lake is looked for in its parent.
+
+    source="jsonl" reads every session's screened.jsonl and checks it against the manifest's SHA-256.
+    source="lake" reads the session's Parquet partitions: only the needed columns, and for sessions outside the
+      split only the txid column. A session is used only if its quality report says every manifest row was written
+      and none quarantined. That is a row-count check, not a checksum: use "jsonl" for a strict audit.
+    source="auto" (default) uses the lake where that check passes and JSONL otherwise.
+
+    Both sources return identical rows in a canonical order (manifest session order, then received_at, then txid),
+    so anything order-sensitive, like training-set subsampling, gives the same result from either.
     """
     if split not in SPLITS:
         raise ValueError(f"split must be one of {SPLITS}")
+    if source not in SPLIT_SOURCES:
+        raise ValueError(f"source must be one of {SPLIT_SOURCES}")
+    if manifest["selection"].get("row_order") != CANONICAL_ROW_ORDER:
+        # Manifests built before 2026-10-19 used file order, which only the JSONL files preserve. Keep it, so
+        # models and thresholds recorded from them still reproduce bit for bit.
+        if source == "lake":
+            raise ValueError("this manifest predates canonical row order; it can only be read from JSONL")
+        return _load_split_file_order(manifest, split, root)
+    lake_files = _lake_index(root.parent / "lake") if source != "jsonl" else {}
+    rows, seen = [], set()
+    for session in manifest["sessions"]:
+        wanted = session["split"] == split
+        files = lake_files.get(session["run_id"]) if _lake_matches(root.parent / "lake", session) else None
+        if source == "lake" and files is None:
+            raise ValueError(f"{session['run_id']} has no complete lake partition matching the manifest")
+        if files is not None:
+            session_rows = _read_lake(files, full=wanted)
+        else:
+            session_rows = _read_jsonl(root / session["screened_file"], session["screened_sha256"], full=wanted)
+        if not wanted:  # only the txids matter here: they feed the duplicate policy
+            seen.update(session_rows)
+            continue
+        for row in session_rows:
+            if row["txid"] not in seen:
+                seen.add(row["txid"])
+                rows.append(row)
+    return rows
+
+
+def _load_split_file_order(manifest: dict, split: str, root: Path) -> list[dict]:
     rows, seen = [], set()
     for session in manifest["sessions"]:
         path = root / session["screened_file"]
@@ -206,5 +268,53 @@ def load_split(manifest: dict, split: str, root: Path) -> list[dict]:
 def _slim(row: dict) -> dict:
     """Keep only what training and evaluation read. A full row with its explanation strings is several times
     larger, and a split can hold millions of rows."""
-    return {"txid": row["txid"], "received_at": row["received_at"], "features": row["features"],
-            "is_flagged": row["is_flagged"], "signals": [{"rule_id": s["rule_id"]} for s in row["signals"]]}
+    return {"txid": row["txid"], "features": row["features"], "is_flagged": row["is_flagged"],
+            "signals": [{"rule_id": s["rule_id"]} for s in row["signals"]]}
+
+
+def _read_jsonl(path: Path, expected_sha256: str, *, full: bool) -> list[dict]:
+    if sha256_file(path) != expected_sha256:
+        raise ValueError(f"{path} has changed since the manifest was built")
+    keyed = []
+    with path.open("rb") as lines:
+        for raw in lines:
+            row = json.loads(raw, parse_constant=reject_nonfinite)
+            moment = datetime.fromisoformat(row["received_at"])
+            keyed.append((moment, row["txid"], _slim(row) if full else row["txid"]))
+    keyed.sort(key=lambda item: (item[0], item[1]))
+    return [row for _, _, row in keyed]
+
+
+def _lake_index(lake: Path) -> dict[str, list[Path]]:
+    """Map session name to its transactions files, found once with a single directory walk."""
+    index: dict[str, list[Path]] = {}
+    directory = lake / "transactions"
+    if directory.is_dir():
+        for path in directory.glob("dt=*/hour=*/*.parquet"):
+            index.setdefault(path.stem, []).append(path)
+    return index
+
+
+def _lake_matches(lake: Path, session: dict) -> bool:
+    report = lake / "_quality" / f"{session['run_id']}.json"
+    if not report.is_file():
+        return False
+    stats = json.loads(report.read_text(encoding="utf-8"))["tables"]["transactions"]
+    return stats["rows_quarantined"] == 0 and stats["rows_written"] == stats["rows_in"] == session["rows"]
+
+
+def _read_lake(files: list[Path], *, full: bool) -> list[dict]:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+    columns = ["txid", "received_at"] + (list(LAKE_FEATURE_COLUMNS) + ["is_flagged", "rule_ids"] if full else [])
+    table = pa.concat_tables([pq.read_table(path, columns=columns) for path in sorted(files)])
+    table = table.sort_by([("received_at", "ascending"), ("txid", "ascending")])
+    if not full:
+        return table.column("txid").to_pylist()
+    names = LAKE_FEATURE_COLUMNS
+    features = zip(*(table.column(name).to_pylist() for name in names))
+    return [{"txid": txid, "features": dict(zip(names, values)), "is_flagged": flagged,
+             "signals": [{"rule_id": rule} for rule in rules]}
+            for txid, values, flagged, rules in zip(table.column("txid").to_pylist(), features,
+                                                    table.column("is_flagged").to_pylist(),
+                                                    table.column("rule_ids").to_pylist())]

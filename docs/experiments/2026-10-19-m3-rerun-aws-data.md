@@ -40,7 +40,15 @@ Promotion gate for detector `d095dc59ced7`: **not promoted**. It passes determin
 
 As before there are no labels: nothing here measures accuracy, only alert volume, stability, agreement and behaviour on synthetic patterns.
 
+## Addendum: reading splits from the lake (DE3, same day)
+
+`load_split` now reads each session's Parquet partitions (only the needed columns; only `txid` for sessions outside the split) when the session's quality report confirms every manifest row was written, and falls back to JSONL otherwise. Measured on the 527k-row test split: **31 s from the lake against 105 s from JSONL, identical rows**. The whole chain on a new manifest took about 6 minutes against about 40.
+
+Lake and JSONL store rows in different orders, and Isolation Forest samples rows by position, so manifests now declare a row order (`selection.row_order`: session, then received_at, then txid). Manifests built before this keep their original file order and read from JSONL only, so their models reproduce bit for bit: `scripts/reproduce_m3.ps1` matched all 6 checks for both `acc0c2dc3985` and `dcce553c9bae`. The script now verifies the recorded manifest (`blockpulse verify-dataset`: content hash plus every file's SHA-256) instead of rebuilding one from the folder, which would pick up later sessions.
+
+Same data under canonical order (manifest `f78f6dd3565a`, a different 50,000-row training sample): test 28.2 per 1,000 (1.13x budget), Jaccard 0.53, benign controls 1.1%, rule-scope patterns 43.5%. The headline findings hold; the benign and coverage figures move by several points with the training sample alone, so a promotion decision near a gate boundary should be checked across seeds before it is trusted.
+
 ## Follow-ups
 
-- Loading splits re-reads every screened JSON file; reading the Parquet lake instead would cut the chain from about 35 minutes to a few (fits DE3/DE4).
+- Check gate decisions across several seeds and training samples before promoting anything near a boundary.
 - A fee-rate feature relative to the hour's median would address the fee blind spot; that is a feature-set change (new `FEATURE_SET_VERSION`).

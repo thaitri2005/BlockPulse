@@ -862,7 +862,7 @@ The project's goal is to strengthen data engineering and data processing skills 
 | DE1 | Partitioned Parquet lake (`dt`/`hour`, file per session per partition) with a contract-based quality gate, quarantine and per-session quality reports, built by `process-pending` | Columnar storage, partitioning, small-file avoidance, schema as code, data contracts, idempotent rebuilds | **Done** 2026-10-16 ([lake](LAKE.md)) |
 | DE2 | Glue tables with partition projection, an Athena workgroup with a scan cap, saved queries; the same SQL runs locally in DuckDB | Data lake querying, catalog management, cost-aware SQL, one SQL for local and cloud | **Done** 2026-10-16, verified offline ([lake](LAKE.md#query-it-in-aws-athena)) |
 | E3a | Deploy the AWS collector for about 96 hours; the lake fills in S3 and is queryable in Athena | Running a pipeline in the cloud with IaC, monitoring by status files, teardown | **Ready; owner deploys** ([AWS_DEPLOY.md](AWS_DEPLOY.md)) |
-| DE3 | Proof artifacts (the core of M4): a replay load test with measured throughput and latency on a day of data; failure drills (kill a consumer, Postgres, the broker) showing no loss and no duplicate rows; CI green on GitHub; a clean pinned environment | Benchmarking, reliability engineering, at-least-once correctness, CI | Next (can run while E3a collects) |
+| DE3 | Proof artifacts (the core of M4): a replay load test with measured throughput and latency on a day of data; failure drills (kill a consumer, Postgres, the broker) showing no loss and no duplicate rows; CI green on GitHub; a clean pinned environment | Benchmarking, reliability engineering, at-least-once correctness, CI | **In progress.** Done 2026-10-19: model splits read from the lake (3.4x faster, identical rows), manifests declare row order, `verify-dataset`, reproduction fixed for growing data. Open: pinned environment, GitHub/CI, load test, failure drills |
 | DE4 | Modeling layer with dbt on the lake (dbt-duckdb locally, dbt-athena optional): staging and mart models (`fct_transactions`, `fct_hourly_activity`, `dim_capture_sessions`), dbt tests, generated docs and lineage | SQL modeling, layered transformations, data tests, documentation | Planned |
 | DE5 | Airflow DAG over the batch tier, run per date partition, with a demonstrated backfill of past dates (safe because every stage is idempotent) | Orchestration, scheduling, backfills, retries | Planned; the DAG skeleton exists, the image download failed once |
 | DE6 | Kubernetes: k3d locally and a Helm chart for the stack (Kafka via Strimzi or Redpanda, Postgres StatefulSet, API, Grafana) with probes and resource limits; pod-kill failure drills; optionally k3s on EC2 for a recorded demo, then destroy | Container orchestration, stateful workloads, operational recovery | Planned (last) |
@@ -1075,9 +1075,10 @@ Test suite on 2026-10-16: 119 passed and 1 skipped with `BLOCKPULSE_TEST_DSN` se
 
 **Next session, in order:**
 
-1. **DE3:** clean pinned environment, push to GitHub so CI runs, replay load test and failure drills. Read splits from the Parquet lake to cut the M3 chain from about 35 minutes to a few.
-2. **DE4:** dbt models and tests on the lake.
-3. Decide an alert budget; consider a fee-rate-relative feature (see the [rerun report](experiments/2026-10-19-m3-rerun-aws-data.md)).
+1. **Push to GitHub** (owner: create an empty repository, then `git remote add origin <url>` and `git push -u origin main`) so CI runs for the first time; fix whatever it finds.
+2. **DE3, rest:** a clean pinned environment (lock file), then the replay load test and failure drills.
+3. **DE4:** dbt models and tests on the lake.
+4. Decide an alert budget; check promotion-gate decisions across seeds (see the [rerun report](experiments/2026-10-19-m3-rerun-aws-data.md)).
 
 **Housekeeping:** Kafka (up to 1 GiB), Postgres (512 MB), and Grafana (384 MB) are separate Compose profiles. Stop what you aren't using (`docker compose --profile m1 stop`, `docker compose --profile m2 stop`); data volumes persist.
 

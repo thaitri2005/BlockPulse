@@ -19,13 +19,13 @@ The project owner is learning streaming data engineering while building this. Op
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # 105 passed, 15 skipped; with BLOCKPULSE_TEST_DSN set (see docs/M2_POSTGRES.md): 119 passed, 1 skipped
+.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/M2_POSTGRES.md): 127 passed, 1 skipped
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
 docker compose --profile m2 up -d --wait          # Postgres + Grafana (~900 MB); `stop` when done
 ```
 
-Rebuild the whole M3 chain and compare with the recorded artifacts: `powershell -File scripts/reproduce_m3.ps1`. The champion detector is in `data/detectors/registry.jsonl` (`blockpulse detectors status`); the rules are champion until a model clears the gate.
+Rebuild the whole M3 chain and compare with the recorded artifacts: `powershell -File scripts/reproduce_m3.ps1 [-Manifest data/datasets/dataset-<id>.json]` (`blockpulse verify-dataset <manifest>` checks a manifest alone). Model splits read from the Parquet lake when it matches the manifest; manifests built before 2026-10-19 keep file order and read JSONL only, so old results reproduce exactly. The champion detector is in `data/detectors/registry.jsonl` (`blockpulse detectors status`); the rules are champion until a model clears the gate.
 
 Unattended collection uses one implementation (`blockpulse collect-loop`, `process-pending`, `sync-pending` in `collector.py`) for the laptop task, Airflow (never run) and AWS. See docs/M4_COLLECTION.md and docs/AWS_DEPLOY.md.
 
