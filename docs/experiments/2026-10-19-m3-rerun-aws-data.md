@@ -46,7 +46,7 @@ As before there are no labels: nothing here measures accuracy, only alert volume
 
 Lake and JSONL store rows in different orders, and Isolation Forest samples rows by position, so manifests now declare a row order (`selection.row_order`: session, then received_at, then txid). Manifests built before this keep their original file order and read from JSONL only, so their models reproduce bit for bit: `scripts/reproduce_m3.ps1` matched all 6 checks for both `acc0c2dc3985` and `dcce553c9bae`. The script now verifies the recorded manifest (`blockpulse verify-dataset`: content hash plus every file's SHA-256) instead of rebuilding one from the folder, which would pick up later sessions.
 
-Same data under canonical order (manifest `f78f6dd3565a`, a different 50,000-row training sample): test 28.2 per 1,000 (1.13x budget), Jaccard 0.53, benign controls 1.1%, rule-scope patterns 43.5%. The headline findings hold; the benign and coverage figures move by several points with the training sample alone, so a promotion decision near a gate boundary should be checked across seeds before it is trusted.
+Same data under canonical order (manifest `f78f6dd3565a`, a different 50,000-row training sample): test 28.2 per 1,000 (1.13x budget), Jaccard 0.53, benign controls 1.1% (was 5.6%), all synthetic target patterns 43.5% (was 48.8%). The headline findings hold; the benign and coverage figures move by several points with the training sample alone, so a promotion decision near a gate boundary should be checked across seeds before it is trusted.
 
 ## Follow-ups
 
