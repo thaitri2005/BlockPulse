@@ -15,7 +15,7 @@ dev = ["pytest==8.4.2", "httpx==0.28.1"]
 m1 = ["confluent-kafka==2.16.0", "pyarrow==25.0.0"]
 ml = ["scikit-learn==1.5.0"]
 lake = ["pyarrow==25.0.0"]
-analytics = ["pyarrow==25.0.0", "duckdb==1.5.6"]
+analytics = ["pyarrow==25.0.0", "duckdb==1.5.6", "pytz==2025.2"]  # duckdb needs pytz to return timestamptz values
 m2 = ["psycopg[binary]==3.3.4", "fastapi==0.117.1", "uvicorn==0.37.0"]
 all = ["blockpulse[dev,m1,m2,ml,analytics]"]
 
