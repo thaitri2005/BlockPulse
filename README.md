@@ -15,9 +15,10 @@ A flag means *unusual structure*. It is not a fraud probability or evidence of w
 | **Serving** | Postgres with duplicate-safe loads and lifecycle projection, read-only API, Grafana dashboard | Re-loading adds no rows; dashboard queries verified ([04](docs/guides/04-postgres-api-dashboard.md)) |
 | **Reproducible evaluation** | Checksummed manifests with chronological splits, Isolation Forest, threshold calibration, synthetic sweep, gated detector registry | Two recorded runs rebuild exactly (6 of 6 checks); rules stay champion on 2.65 M rows ([06](docs/guides/06-ml-evaluation.md)) |
 | **Load test** | Batch and streaming benchmarks on recorded traffic; found and fixed a per-message commit bottleneck | A day of traffic in 5.8 min (about 250x real time); enrichment 86 to 152 msg/s, p50 latency 72 s to 0.16 s ([09](docs/guides/09-load-test.md)) |
-| **Testing and CI** | A hashed lock file for every dependency, 131 pytest tests, Terraform tests with a mocked AWS provider, Amazon Linux 2023 + systemd rehearsals, GitHub Actions | All green on GitHub Actions ([workflow](.github/workflows/ci.yml)) |
+| **Failure drills** | Hard-kill the enrichment worker, restart the broker, crash a Postgres load mid-transaction | All pass: 0 messages lost, duplicates absorbed by idempotent sinks; found and fixed a consumer-restart bug ([10](docs/guides/10-failure-drills.md)) |
+| **Testing and CI** | A hashed lock file for every dependency, 133 pytest tests, Terraform tests with a mocked AWS provider, Amazon Linux 2023 + systemd rehearsals, GitHub Actions | All green on GitHub Actions ([workflow](.github/workflows/ci.yml)) |
 
-**Not done yet:** failure drills, dbt models, an Airflow backfill DAG, and Kubernetes. No accuracy figures exist, because there are no labels. See the [plan](docs/PROJECT_PLAN.md) for status and order.
+**Not done yet:** dbt models, an Airflow backfill DAG, and Kubernetes. No accuracy figures exist, because there are no labels. See the [plan](docs/PROJECT_PLAN.md) for status and order.
 
 ## Quick start (offline, a few minutes)
 
@@ -57,6 +58,7 @@ The regional node is passed explicitly because the default host times out from s
 | [07 · Collection](docs/guides/07-collection.md) | Unattended capture on the laptop or AWS |
 | [08 · AWS](docs/guides/08-aws.md) | Deploy, monitor, download, tear down; costs; what was verified |
 | [09 · Load test](docs/guides/09-load-test.md) | Throughput and latency on real traffic; the bottleneck and its fix |
+| [10 · Failure drills](docs/guides/10-failure-drills.md) | Crash a component mid-run and prove nothing is lost or duplicated |
 | [Experiments](docs/experiments/) | Dated measurements behind every claim |
 | [Learning path](docs/learning/README.md) | Exercises through the code |
 

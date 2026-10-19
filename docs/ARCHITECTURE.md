@@ -45,7 +45,7 @@ Design rules that hold everywhere:
 | Lake and SQL | `lake-query`, `lake-schema` (the lake itself is built by `process-pending`) | [05](guides/05-lake-and-athena.md) |
 | ML evaluation | `build-dataset`, `verify-dataset`, `train-iforest`, `evaluate-iforest`, `sweep`, `detectors ...` | [06](guides/06-ml-evaluation.md) |
 | Unattended collection | `collect`, `collect-loop`, `process-pending`, `sync-pending` | [07](guides/07-collection.md), [08](guides/08-aws.md) |
-| Load test | `benchmark batch`, `benchmark streaming` | [09](guides/09-load-test.md) |
+| Load test and drills | `benchmark batch`, `benchmark streaming`, `drill enrich-crash`, `drill broker-restart`, `drill postgres-crash` | [09](guides/09-load-test.md), [10](guides/10-failure-drills.md) |
 
 ## Code
 
@@ -68,6 +68,7 @@ Python package `src/blockpulse/` (about 4,500 lines, flat on purpose):
 | `model.py`, `evaluate.py`, `sweep.py`, `registry.py` | 719 | Isolation Forest, threshold calibration, synthetic sweep, detector registry and gate |
 | `collector.py` | 314 | Capture loop, idempotent session processing, lock, S3 upload |
 | `benchmark.py` | 198 | Batch and streaming load tests on recorded sessions (`benchmark`) |
+| `drills.py` | 191 | Failure drills: worker crash, broker restart, Postgres crash (`drill`) |
 | `cli.py` | 453 | Command-line entry point |
 
 Elsewhere:

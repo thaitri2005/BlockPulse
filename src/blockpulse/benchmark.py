@@ -117,8 +117,8 @@ def _offline_fetch(txid):
     raise RuntimeError("the benchmark never calls the public API")
 
 
-def _read_topic_timestamps(bootstrap: str, topic: str, *, timeout: float = 30.0) -> dict[str, int]:
-    """message_id -> Kafka append timestamp (ms), reading the whole topic with a throwaway consumer."""
+def read_topic(bootstrap: str, topic: str, *, timeout: float = 30.0) -> list[tuple[str, int]]:
+    """Every record's (message_id, Kafka append timestamp in ms), duplicates included, via a throwaway consumer."""
     from confluent_kafka import Consumer, TopicPartition
     consumer = Consumer({"bootstrap.servers": bootstrap, "group.id": f"blockpulse-bench-reader-{time.time_ns()}",
                          "enable.auto.commit": False, "auto.offset.reset": "earliest"})
@@ -126,18 +126,25 @@ def _read_topic_timestamps(bootstrap: str, topic: str, *, timeout: float = 30.0)
     partitions = [TopicPartition(topic, p, 0) for p in metadata.topics[topic].partitions]
     ends = {p.partition: consumer.get_watermark_offsets(p, timeout=10)[1] for p in partitions}
     consumer.assign(partitions)
-    found, done, deadline = {}, {p for p, end in ends.items() if end == 0}, time.monotonic() + timeout
+    found, done, deadline = [], {p for p, end in ends.items() if end == 0}, time.monotonic() + timeout
     while len(done) < len(partitions) and time.monotonic() < deadline:
         message = consumer.poll(0.5)
         if message is None or message.error():
             continue
         row = json.loads(message.value())
-        found[row.get("message_id")] = message.timestamp()[1]
+        found.append((row.get("message_id"), message.timestamp()[1]))
         if message.offset() + 1 >= ends[message.partition()]:
             done.add(message.partition())
         deadline = time.monotonic() + timeout
     consumer.close()
     return found
+
+
+def _first_timestamps(bootstrap: str, topic: str) -> dict[str, int]:
+    first = {}
+    for message_id, timestamp in read_topic(bootstrap, topic):
+        first.setdefault(message_id, timestamp)
+    return first
 
 
 def benchmark_streaming(raw_sessions: list[Path], bootstrap: str) -> dict:
@@ -166,8 +173,8 @@ def benchmark_streaming(raw_sessions: list[Path], bootstrap: str) -> dict:
     publish_seconds = time.monotonic() - started
     worker.join()
     total_seconds = time.monotonic() - started
-    raw_times = _read_topic_timestamps(bootstrap, RAW_TOPIC)
-    enriched_times = _read_topic_timestamps(bootstrap, ENRICHED_TOPIC)
+    raw_times = _first_timestamps(bootstrap, RAW_TOPIC)
+    enriched_times = _first_timestamps(bootstrap, ENRICHED_TOPIC)
     latencies = [(enriched_times[mid] - raw_times[mid]) for mid in raw_times if mid in enriched_times]
     enrich = result.get("enrich", {})
     return {

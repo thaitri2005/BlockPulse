@@ -24,7 +24,7 @@ What the project will not claim:
 | M3 · ML evaluation | Done | Rules stay champion; Isolation Forest fails 2 of 4 gate criteria on 2.65 M rows ([06](guides/06-ml-evaluation.md)) |
 | DE1–DE2 · Lake and Athena | Done | Partitioned Parquet, quality gate (0 of 8.5 M rows quarantined across 94 sessions), same SQL in DuckDB and Athena ([05](guides/05-lake-and-athena.md)) |
 | E3a · AWS collector | Done | 89 h, 0 failures, 2.65 M transactions, about $0.80, torn down ([08](guides/08-aws.md)) |
-| DE3 · Proof artifacts | **In progress** | Done: model splits read from the lake (3.4x faster, identical rows), declared row order, `verify-dataset`, reproduction for growing data. CI green on GitHub (2026-10-20; the first run caught an undeclared `pytz` dependency). Clean pinned environment (2026-10-20): hashed `requirements.lock` for every dependency, isolated venv, CI installs from the lock and fails if it's stale, the AWS bundle ships the same pins; both recorded runs still reproduce 6 of 6. Load test (2026-10-20): a day of traffic processes in 5.8 min (about 250x real time); the streaming test found per-message commits as the bottleneck, and batched checkpoints raised enrichment from 86 to 152 msg/s and cut p50 latency from 72 s to 0.16 s ([09](guides/09-load-test.md)). Open: failure drills |
+| DE3 · Proof artifacts | Done | Done: model splits read from the lake (3.4x faster, identical rows), declared row order, `verify-dataset`, reproduction for growing data. CI green on GitHub (2026-10-20; the first run caught an undeclared `pytz` dependency). Clean pinned environment (2026-10-20): hashed `requirements.lock` for every dependency, isolated venv, CI installs from the lock and fails if it's stale, the AWS bundle ships the same pins; both recorded runs still reproduce 6 of 6. Load test (2026-10-20): a day of traffic processes in 5.8 min (about 250x real time); the streaming test found per-message commits as the bottleneck, and batched checkpoints raised enrichment from 86 to 152 msg/s and cut p50 latency from 72 s to 0.16 s ([09](guides/09-load-test.md)). Failure drills (2026-10-20): worker crash, broker restart and Postgres crash all pass with 0 lost and duplicates absorbed by idempotent sinks; the first crash drill found and fixed a consumer-restart bug ([10](guides/10-failure-drills.md)). **DE3 done** |
 | DE4–DE6 | Planned | See the roadmap |
 
 Tests (2026-10-20): 127 passed and 1 optional skip with the Postgres test database; Terraform 9 of 9 with a mocked provider; Amazon Linux 2023 container rehearsals all pass.
@@ -38,7 +38,7 @@ Ordered by how much each step builds and demonstrates data engineering skill. Ea
 | DE1 | Partitioned Parquet lake with a contract-based quality gate | Columnar storage, partitioning, data contracts, idempotent rebuilds | Done |
 | DE2 | Glue + Athena with partition projection and a scan cap; shared SQL with DuckDB | Lake querying, catalogs, cost-aware SQL | Done |
 | E3a | Self-expiring AWS collector, 4 days | IaC, cloud operations, teardown | Done |
-| DE3 | CI green; pinned environment; replay load test with measured throughput and latency; failure drills (kill a consumer, Postgres, the broker) showing no loss and no duplicates | Benchmarking, reliability, at-least-once correctness | In progress |
+| DE3 | CI green; pinned environment; replay load test with measured throughput and latency; failure drills (kill a consumer, Postgres, the broker) showing no loss and no duplicates | Benchmarking, reliability, at-least-once correctness | Done |
 | DE4 | dbt on the lake (dbt-duckdb, optionally dbt-athena): staging and marts (`fct_transactions`, `fct_hourly_activity`, `dim_capture_sessions`), tests, docs and lineage | SQL modelling, data tests | Next |
 | DE5 | Airflow DAG over the batch tier by date partition, with a demonstrated backfill | Orchestration, backfills, retries | Planned |
 | DE6 | Kubernetes: k3d and a Helm chart (Kafka, Postgres StatefulSet, API, Grafana) with probes and limits; pod-kill drills | Container orchestration, stateful workloads | Planned, last |
@@ -49,8 +49,8 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 
 **Next session:**
 
-1. DE3: failure drills (kill the enrichment worker, Postgres, and the broker mid-run; show no loss and no duplicate rows).
-2. DE4: dbt.
+1. DE4: dbt models, tests and docs on the lake.
+2. Optional: let the enrichment worker rejoin its group after a broker restart instead of stopping.
 
 ## 4. Decisions
 
@@ -86,6 +86,7 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 | Dependency drift (system numpy changed between two runs before the lock) | Hashed lock, isolated venv, CI lock check; models record library versions |
 | A cloud run keeps billing | Deadline poweroff, budget alert, bucket expiry, teardown checklist ([08](guides/08-aws.md)) |
 | Too many services slow delivery | Compose profiles; stop what isn't in use |
+| Enrichment worker stops after a broker restart (commit rejected) | Safe: nothing uncertain is committed; run it under a supervisor; drill 2 in [10](guides/10-failure-drills.md) |
 
 ## 6. Resuming work
 

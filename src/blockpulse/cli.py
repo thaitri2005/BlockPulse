@@ -185,6 +185,17 @@ def main(argv: list[str] | None = None) -> int:
     bench.add_argument("--limit", type=int, help="Use at most this many matching sessions")
     bench.add_argument("--bootstrap-servers", default=DEFAULT_BOOTSTRAP_SERVERS)
     bench.add_argument("--output", type=Path, default=Path("data/benchmarks"))
+    drill = commands.add_parser("drill", help="Failure drills: crash a component mid-run and verify no loss or duplicates")
+    drill.add_argument("name", choices=("enrich-crash", "broker-restart", "postgres-crash"))
+    drill.add_argument("--root", type=Path, default=Path("data"))
+    drill.add_argument("--sessions", default="session-aws-20261017T0", help="Session name prefix for the Kafka drills")
+    drill.add_argument("--limit", type=int, default=2)
+    drill.add_argument("--bootstrap-servers", default=DEFAULT_BOOTSTRAP_SERVERS)
+    drill.add_argument("--screened", type=Path, default=Path("data/screened/session-aws-20261017T104546Z"),
+                       help="Screened session to load in the Postgres drill")
+    drill.add_argument("--admin-dsn", default="postgresql://blockpulse:blockpulse_dev@127.0.0.1:5432/blockpulse",
+                       help="Used only to create and drop the separate blockpulse_drill database")
+    drill.add_argument("--output", type=Path, default=Path("data/drills"))
     args = parser.parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
@@ -424,6 +435,21 @@ def main(argv: list[str] | None = None) -> int:
             if "end_to_end_latency_ms" in report:
                 summary["end_to_end_latency_ms"] = report["end_to_end_latency_ms"]
             code = 0
+        elif args.command == "drill":
+            from blockpulse import drills
+            if args.name == "postgres-crash":
+                report = drills.drill_postgres_crash(args.screened, args.admin_dsn)
+            else:
+                sessions = sorted(p for p in (args.root / "raw").glob(f"{args.sessions}*") if (p / "summary.json").is_file())[:args.limit]
+                if not sessions:
+                    raise ValueError(f"No finished captures start with {args.sessions!r}")
+                work = args.output / f"work-{args.name}-{drills.utc_now()[:19].replace(':', '').replace('-', '')}"
+                run = drills.drill_enrich_crash if args.name == "enrich-crash" else drills.drill_broker_restart
+                report = run(sessions, args.bootstrap_servers, work)
+            output = drills.write_report(report, args.output)
+            summary = {"drill": report["drill"], "passed": report["passed"],
+                       "checks": [f"{'PASS' if c['passed'] else 'FAIL'} {c['check']}" for c in report["checks"]]}
+            code = 0 if report["passed"] else 4
         elif args.command == "kafka-init":
             output = None
             summary = _kafka_call("Kafka topic initialization", lambda: create_m1_topics(args.bootstrap_servers))
