@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import json
+import shutil
 from pathlib import Path
 import sys
 
@@ -176,6 +177,14 @@ def main(argv: list[str] | None = None) -> int:
     sync_parser.add_argument("--root", type=Path, default=Path("data"))
     sync_parser.add_argument("--bucket", required=True)
     sync_parser.add_argument("--prefix", default="data")
+    bench = commands.add_parser("benchmark", help="Load-test the batch or streaming path on recorded sessions")
+    bench.add_argument("path", choices=("batch", "streaming"))
+    bench.add_argument("--root", type=Path, default=Path("data"))
+    bench.add_argument("--sessions", default="session-aws-20261017",
+                       help="Session name prefix to replay, e.g. one UTC day (default: Saturday 2026-10-17)")
+    bench.add_argument("--limit", type=int, help="Use at most this many matching sessions")
+    bench.add_argument("--bootstrap-servers", default=DEFAULT_BOOTSTRAP_SERVERS)
+    bench.add_argument("--output", type=Path, default=Path("data/benchmarks"))
     args = parser.parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
@@ -397,6 +406,24 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 print(text, end="")
             return 0
+        elif args.command == "benchmark":
+            from blockpulse import benchmark
+            raw_root = args.root / "raw"
+            sessions = sorted(p for p in raw_root.glob(f"{args.sessions}*") if (p / "summary.json").is_file())[:args.limit]
+            if not sessions:
+                raise ValueError(f"No finished captures under {raw_root} start with {args.sessions!r}")
+            if args.path == "batch":
+                work = args.output / f"work-{benchmark.utc_now()[:19].replace(':', '').replace('-', '')}"
+                report = benchmark.benchmark_batch(sessions, work)
+            else:
+                report = benchmark.benchmark_streaming(sessions, args.bootstrap_servers)
+            output = benchmark.write_report(report, args.output)  # save the numbers before any cleanup
+            if args.path == "batch":
+                shutil.rmtree(work, ignore_errors=True)  # scratch copies only
+            summary = {k: report[k] for k in ("input", "seconds", "throughput")}
+            if "end_to_end_latency_ms" in report:
+                summary["end_to_end_latency_ms"] = report["end_to_end_latency_ms"]
+            code = 0
         elif args.command == "kafka-init":
             output = None
             summary = _kafka_call("Kafka topic initialization", lambda: create_m1_topics(args.bootstrap_servers))
