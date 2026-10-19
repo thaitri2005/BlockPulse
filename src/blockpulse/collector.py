@@ -1,4 +1,4 @@
-"""Unattended collection, shared by every runner (laptop task, Airflow, the AWS instance).
+"""Unattended collection, shared by every runner (the laptop scheduled task and the AWS instance).
 
 Two independent jobs, so a slow step never stops the capture:
 

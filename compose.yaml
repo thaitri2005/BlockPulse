@@ -35,7 +35,7 @@ services:
 
   postgres:
     image: postgres:17
-    profiles: [m2, airflow]
+    profiles: [m2]
     ports:
       - "127.0.0.1:5432:5432"
     environment:
@@ -80,45 +80,6 @@ services:
       retries: 12
       start_period: 15s
 
-  airflow:
-    build: ./orchestration/airflow
-    image: blockpulse-airflow:2.10.5
-    profiles: [airflow]
-    depends_on:
-      postgres:
-        condition: service_healthy
-    ports:
-      - "127.0.0.1:8080:8080"
-    command: ["python", "/opt/blockpulse/orchestration/airflow/start.py"]
-    environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-blockpulse_dev}
-      AIRFLOW_ADMIN_PASSWORD: ${AIRFLOW_PASSWORD:-blockpulse_dev}
-      AIRFLOW__CORE__EXECUTOR: LocalExecutor
-      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-      AIRFLOW__CORE__PARALLELISM: "4"
-      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://blockpulse:${POSTGRES_PASSWORD:-blockpulse_dev}@postgres:5432/airflow
-      AIRFLOW__WEBSERVER__WORKERS: "1"
-      AIRFLOW__WEBSERVER__SECRET_KEY: blockpulse-local-only
-      AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "False"
-      AIRFLOW__SCHEDULER__MIN_FILE_PROCESS_INTERVAL: "60"
-      PYTHONPATH: /opt/blockpulse/src
-      PYTHONWARNINGS: ignore
-      BLOCKPULSE_ROOT: /opt/blockpulse
-      BLOCKPULSE_DSN: postgresql://blockpulse:${POSTGRES_PASSWORD:-blockpulse_dev}@postgres:5432/blockpulse
-    volumes:
-      - ./orchestration/airflow/dags:/opt/airflow/dags:ro
-      - .:/opt/blockpulse
-      - airflow-logs:/opt/airflow/logs
-    mem_limit: 2g
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health | grep -q healthy || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 20
-      start_period: 90s
-
 volumes:
   kafka-data:
   postgres-data:
-  airflow-logs:
