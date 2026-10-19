@@ -1,25 +1,25 @@
 # Working on BlockPulse
 
-The project owner is learning streaming data engineering while building this. Optimize for their understanding, not only for working code.
+The project owner is building this to learn data engineering. Optimize for their understanding, not only for working code.
 
 ## How we work
 
-- **Small steps.** One milestone step (for example, M2.1) per session, ending in passing tests, a doc update, and a commit. Don't land 1,000+ line changes in one go.
+- **Small steps.** One roadmap step (for example, DE3) at a time, ending in passing tests, a doc update, and a commit. Don't land 1,000+ line changes in one go.
 - **Explain as you build.** Name each new concept briefly when it first appears (consumer group, idempotent sink, migration, and so on). Point to the exercise in `docs/learning/README.md` that covers it, or add one.
-- **Ask before adding infrastructure** (new services, dependencies, cloud resources). The plan's scope rules are in `docs/PROJECT_PLAN.md` §2 and §19.
-- **Always leave a handoff.** Before stopping, update the tracker and "Next session" list in `docs/PROJECT_PLAN.md` §21, and tell the user what's running, for example the Kafka container.
+- **Ask before adding infrastructure** (new services, dependencies, cloud resources). Decisions and scope are in `docs/PROJECT_PLAN.md` §3 and §4.
+- **Always leave a handoff.** Before stopping, update the status table and "Next session" list in `docs/PROJECT_PLAN.md` §2-3, and tell the user what's running, for example the Kafka container.
 
 ## Where things are
 
-- Canonical plan, status, and next steps: `docs/PROJECT_PLAN.md` (§16 milestones and the data engineering roadmap DE1-DE6, §21 tracker). The project's purpose is data engineering skill (D18).
-- What's actually built: `docs/ARCHITECTURE_CURRENT.md`. Where the build differs from the plan, the plan has an **As built** note; keep both in sync.
-- Evidence for every measured claim: `docs/experiments/YYYY-MM-DD-*.md`.
-- Naming: milestones are M0-M4. `PHASE0.md` is M0 and `PHASE1.md` is M2.0; use M-numbers for new work.
+- Plan, status, roadmap (DE1-DE6), decisions: `docs/PROJECT_PLAN.md`. The purpose is data engineering skill (D18).
+- What's built: `docs/ARCHITECTURE.md`. How to run each part: `docs/guides/01-...08-*.md`. Keep them in sync with the code.
+- Evidence for every measured claim: `docs/experiments/YYYY-MM-DD-*.md`. The README's "What's done" table must only cite proven numbers.
+- `docs/archive/original-design.md` is the historical design; don't update it.
 
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/M2_POSTGRES.md): 127 passed, 1 skipped
+.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/guides/04-postgres-api-dashboard.md): 127 passed, 1 skipped
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
 docker compose --profile m2 up -d --wait          # Postgres + Grafana (~900 MB); `stop` when done
@@ -27,7 +27,7 @@ docker compose --profile m2 up -d --wait          # Postgres + Grafana (~900 MB)
 
 Rebuild the whole M3 chain and compare with the recorded artifacts: `powershell -File scripts/reproduce_m3.ps1 [-Manifest data/datasets/dataset-<id>.json]` (`blockpulse verify-dataset <manifest>` checks a manifest alone). Model splits read from the Parquet lake when it matches the manifest; manifests built before 2026-10-19 keep file order and read JSONL only, so old results reproduce exactly. The champion detector is in `data/detectors/registry.jsonl` (`blockpulse detectors status`); the rules are champion until a model clears the gate.
 
-Unattended collection uses one implementation (`blockpulse collect-loop`, `process-pending`, `sync-pending` in `collector.py`) for the laptop task, Airflow (never run) and AWS. See docs/M4_COLLECTION.md and docs/AWS_DEPLOY.md.
+Unattended collection uses one implementation (`blockpulse collect-loop`, `process-pending`, `sync-pending` in `collector.py`) for the laptop task and AWS. See docs/guides/07-collection.md and docs/guides/08-aws.md.
 
 Infrastructure checks (no AWS account needed):
 
@@ -51,5 +51,5 @@ The live WebSocket needs `--url wss://node203.sv1.mempool.space/api/v1/ws`, beca
 - Tests must not hit the public API. Use the fixtures in `examples/fixtures/` or mocks, as the existing tests do.
 - Amounts are integer satoshis. Missing values are errors, never zero.
 - Feature or rule changes bump `FEATURE_SET_VERSION` / `RULESET_VERSION`.
-- Never describe a flag or score as fraud, illicit activity, or accuracy. Unlabeled data supports only structural statements (see `docs/PHASE1_REVIEW_RUBRIC.md`).
-- Commit messages: short conventional prefix (`feat:`, `docs:`, `fix:`, `test:`) plus a one-line summary.
+- Never describe a flag or score as fraud, illicit activity, or accuracy. Unlabeled data supports only structural statements (see `docs/guides/02-structural-rules.md#review-rubric`).
+- Commit messages: short conventional prefix (`feat:`, `docs:`, `fix:`, `test:`) plus a one-line summary. Commits are authored as the owner with no AI attribution trailer; push to `origin main` when the owner asks.

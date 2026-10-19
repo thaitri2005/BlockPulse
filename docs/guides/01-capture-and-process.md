@@ -1,6 +1,6 @@
-# Phase 0: capture and replay the data path
+# 01 · Capture and process
 
-> **Status:** complete (this is milestone M0 in the [project plan](PROJECT_PLAN.md)). Kafka transport, REST enrichment, and Parquet archives were added later in [M1](M1_KAFKA.md). The commands below still work and are the simplest offline path.
+The simplest path through the pipeline: record the live feed to a file, then turn it into events and features offline. Everything later (Kafka, the lake, the models) builds on these two commands. Milestone M0; the [Kafka path](03-kafka.md) and [unattended collection](07-collection.md) reuse the same code.
 
 Implemented path:
 
@@ -39,7 +39,7 @@ Process that capture:
 .\.venv\Scripts\python.exe -m blockpulse process data/raw/first-capture/messages.jsonl
 ```
 
-The explicit regional URL is the endpoint successfully tested from this machine. Omitting it uses `mempool.space`, whose resolved servers timed out on TCP connection during our checks. This is an endpoint override for this run, not a change to system DNS or TLS verification. See the [connectivity report](experiments/2026-10-08-source-connectivity.md).
+The explicit regional URL is the endpoint successfully tested from this machine. Omitting it uses `mempool.space`, whose resolved servers timed out on TCP connection during our checks. This is an endpoint override for this run, not a change to system DNS or TLS verification. See the [connectivity report](../experiments/2026-10-08-source-connectivity.md).
 
 For a ten-minute experiment, increase `--duration` to `600`. The byte, message, and retry limits still apply. Omit `--output` to create a unique timestamped run directory, or supply a new directory that does not already exist. No command overwrites a previous run.
 
@@ -105,7 +105,7 @@ Duplicate capture records with the same message identity are ignored after their
 
 All four lifecycle event types are retained, but only `added` transactions feed feature extraction. Confirmations or removals do not erase or recompute previously observed structural features. There is no inferred replacement link when the source does not provide a recognized one.
 
-The original `transaction-v1` feature set contains input count, output count, summed output value, fee, virtual size, and fee rate. Current processing emits `transaction-v2`, which adds equal-positive-output count, round-amount fraction, and an RBF-sequence observation (which can be unknown when data is missing). Amounts are integer satoshis. Missing or invalid required values are errors rather than zero-valued features. Coinbase records are rejected. The package and original one-transaction exercise call the same implementation. See [Phase 1](PHASE1.md) for the added fields and screening behavior.
+The original `transaction-v1` feature set contains input count, output count, summed output value, fee, virtual size, and fee rate. Current processing emits `transaction-v2`, which adds equal-positive-output count, round-amount fraction, and an RBF-sequence observation (which can be unknown when data is missing). Amounts are integer satoshis. Missing or invalid required values are errors rather than zero-valued features. Coinbase records are rejected. The package and original one-transaction exercise call the same implementation. See [Phase 1](02-structural-rules.md) for the added fields and screening behavior.
 
 Processing a fixed input with unchanged code produces identical event, feature, error, and summary files when the input path is unchanged. The summary includes the source's absolute path, so copying the input elsewhere changes that provenance field. Processing targets short local captures; its deduplication sets grow with unique message/transaction counts. Larger archives need a separate storage design.
 
@@ -144,6 +144,6 @@ Verification on 2026-10-08:
 - Python syntax, documentation links, and Git whitespace checks passed.
 - Initial live runs against the default hostname timed out and saved zero messages with explicit failure summaries. Follow-up diagnostics found TCP timeouts on three DNS-returned servers, before TLS or WebSocket negotiation.
 - A regional endpoint, `node203.sv1.mempool.space`, connected with normal certificate verification and delivered five messages containing 22 added transactions in a 6.968-second run. All 22 produced features with no missing inputs or parse issues. Processing the real capture twice produced byte-identical output files.
-- The follow-up ten-minute capture and corrected replacement schema are detailed in the [validation report](experiments/2026-10-09-phase0-phase1-validation.md). After the parser fix, two offline replays were byte-identical and all 44 tests passed with the loopback socket test enabled.
+- The follow-up ten-minute capture and corrected replacement schema are detailed in the [validation report](../experiments/2026-10-09-phase0-phase1-validation.md). After the parser fix, two offline replays were byte-identical and all 44 tests passed with the loopback socket test enabled.
 
-The current Phase 0 validation, including a ten-minute bounded capture, lifecycle observations, host snapshot, size distribution, and deterministic replay, is recorded in the [2026-10-09 validation report](experiments/2026-10-09-phase0-phase1-validation.md). The source still has reconnect gaps, and the measured active-burst storage rate is not a long-run forecast. REST enrichment and Parquet storage were added in [M1](M1_KAFKA.md).
+The current Phase 0 validation, including a ten-minute bounded capture, lifecycle observations, host snapshot, size distribution, and deterministic replay, is recorded in the [2026-10-09 validation report](../experiments/2026-10-09-phase0-phase1-validation.md). The source still has reconnect gaps, and the measured active-burst storage rate is not a long-run forecast. REST enrichment and Parquet storage were added in [M1](03-kafka.md).

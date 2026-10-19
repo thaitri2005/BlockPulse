@@ -1,6 +1,6 @@
 # Learning path
 
-BlockPulse is also a way to learn streaming data engineering. The code moved faster than the walkthroughs: Exercise 1 is written, and everything after it was built without a guided explanation. This page lists the exercises in order so we can catch up before adding Postgres and the API in M2.
+BlockPulse is also a way to learn data engineering. The code moved faster than the walkthroughs: Exercise 1 is written, and the rest are outlined. This page lists them in the order the pipeline was built, each pointing at the code and guide to read.
 
 Each exercise follows the same pattern:
 
@@ -25,14 +25,14 @@ Each exercise is sized for one sitting of about 30-60 minutes. Stop when a conce
 | 9 | Evidence versus projection | Lifecycle events, order-independent status, why late data can't roll status back | `lifecycle.py` → `PROJECT`; `tests/test_lifecycle.py` | To write together |
 | 10 | A read-only API and a dashboard | Keyset pagination, input validation, read-only connections, SQL panels | `api.py` → `list_alerts()`; `observability/grafana/dashboards/` | To write together |
 | 11 | Tracing one transaction end to end | Provenance, replay check, why raw data is kept | `trace.py`; run `scripts/demo_m2.ps1` first | To write together |
-| 12 | Honest evaluation: splits, leakage, manifests | Chronological splits, why whole sessions, checksums, what a split can and cannot prove | `dataset.py` → `choose_cuts()`, `load_split()`; [M3 dataset](../M3_DATASET.md) | To write together |
-| 13 | What an Isolation Forest can and can't see | Unsupervised anomaly scores, log transforms, no extrapolation, in-sample scores | `model.py` → `feature_matrix()`, `train_isolation_forest()`; [M3 model](../M3_MODEL.md) | To write together |
+| 12 | Honest evaluation: splits, leakage, manifests | Chronological splits, why whole sessions, checksums, what a split can and cannot prove | `dataset.py` → `choose_cuts()`, `load_split()`; [ML evaluation §1](../guides/06-ml-evaluation.md#1-dataset-manifest-and-chronological-split) | To write together |
+| 13 | What an Isolation Forest can and can't see | Unsupervised anomaly scores, log transforms, no extrapolation, in-sample scores | `model.py` → `feature_matrix()`, `train_isolation_forest()`; [ML evaluation §2](../guides/06-ml-evaluation.md#2-the-model-isolation-forest) | To write together |
 | 14 | Choosing a threshold without labels | Alert budgets, calibration vs test, why the flag rate moved, agreement is not accuracy | `evaluate.py` → `choose_threshold()`; [first results](../experiments/2026-10-14-m3-first-evaluation.md) | To write together |
 | 15 | Testing a detector on shapes you define | Synthetic labeled cases, benign controls, why a sweep isn't accuracy, saturation | `sweep.py` → `cases()`; [sweep results](../experiments/2026-10-14-m3-synthetic-sweep.md) | To write together |
-| 16 | Who is in charge? Champions, gates, and rollback | Registries as event logs, promotion criteria, why a rejected model is still a result | `registry.py` → `evaluate_promotion()`, `state()`; [M3 report](../M3_REPORT.md) | To write together |
-| 17 | Infrastructure as code you can test | Terraform resources and variables, mocked-provider tests, least-privilege IAM, why no inbound ports | `infra/aws/terraform/` and `tests/collector.tftest.hcl`; [AWS runbook](../AWS_DEPLOY.md) | To write together |
+| 16 | Who is in charge? Champions, gates, and rollback | Registries as event logs, promotion criteria, why a rejected model is still a result | `registry.py` → `evaluate_promotion()`, `state()`; [ML evaluation §5](../guides/06-ml-evaluation.md#5-detector-bundles-registry-and-promotion-gate) | To write together |
+| 17 | Infrastructure as code you can test | Terraform resources and variables, mocked-provider tests, least-privilege IAM, why no inbound ports | `infra/aws/terraform/` and `tests/collector.tftest.hcl`; [AWS guide](../guides/08-aws.md) | To write together |
 | 18 | Running a service properly on Linux | systemd services and timers, clean shutdown with SIGINT, sandboxing, idempotent jobs | `infra/aws/instance/systemd/`, `collector.py`; `infra/aws/tests/systemd_e2e.sh` | To write together |
-| 19 | Lake layout and data contracts | Parquet vs JSONL, Hive partitions and pruning, small files, quarantine vs silent fixes, idempotent rebuilds | `lake.py` → `validate()`, `build_session()`; [lake](../LAKE.md) | To write together |
+| 19 | Lake layout and data contracts | Parquet vs JSONL, Hive partitions and pruning, small files, quarantine vs silent fixes, idempotent rebuilds | `lake.py` → `validate()`, `build_session()`; [lake guide](../guides/05-lake-and-athena.md) | To write together |
 | 20 | One SQL, two engines | DuckDB over local files, Athena over S3, partition projection, scan cost | `analytics.py`, `analytics/queries/`, `infra/aws/terraform/analytics.tf` | To write together |
 
 ## Exercise outlines

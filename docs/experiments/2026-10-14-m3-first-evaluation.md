@@ -1,6 +1,6 @@
 # M3.3: first threshold calibration and rules comparison
 
-Date: 2026-10-14. Dataset manifest `acc0c2dc3985`; model `iforest-acc0c2dc3985-seed7` (see [M3 model](../M3_MODEL.md)); detector ID `53a956583b6f`. Reproduce with `evaluate-iforest` (see [M3 evaluation](../M3_EVALUATION.md)). Local output: `data/evaluations/iforest-acc0c2dc3985-seed7-budget25/`.
+Date: 2026-10-14. Dataset manifest `acc0c2dc3985`; model `iforest-acc0c2dc3985-seed7` (see [M3 model](../guides/06-ml-evaluation.md#2-the-model-isolation-forest)); detector ID `53a956583b6f`. Reproduce with `evaluate-iforest` (see [M3 evaluation](../guides/06-ml-evaluation.md#3-threshold-and-comparison-with-the-rules)). Local output: `data/evaluations/iforest-acc0c2dc3985-seed7-budget25/`.
 
 **Read this first.** There are no independent labels, and calibration and test are each one 10-minute window. Everything below describes alert volume and agreement between two detectors. It is a pipeline check, not evidence that either detector is good, and it will change as sessions are added.
 

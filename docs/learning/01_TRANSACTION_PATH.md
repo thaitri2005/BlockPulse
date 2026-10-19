@@ -135,7 +135,7 @@ Stop after the first two if the fields are still unfamiliar. Understanding one r
 
 ## What comes next
 
-Continue with the [learning path](README.md). Exercise 2 moves from one transaction to a continuous WebSocket stream, using the [Phase 0 capture and replay commands](../PHASE0.md).
+Continue with the [learning path](README.md). Exercise 2 moves from one transaction to a continuous WebSocket stream, using the [Phase 0 capture and replay commands](../guides/01-capture-and-process.md).
 
 This example does not yet measure sustainable API limits, provide complete mempool coverage, or finish M0. It establishes the smallest readable path we can use to learn those things.
 

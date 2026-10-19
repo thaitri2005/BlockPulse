@@ -1,5 +1,5 @@
 # One data-collection session on this laptop: capture, then process, screen, load into Postgres, compact, log.
-# A thin wrapper around `blockpulse collect`; the same code runs on the AWS instance (see docs/AWS_DEPLOY.md).
+# A thin wrapper around `blockpulse collect`; the same code runs on the AWS instance (see docs/guides/08-aws.md).
 # Needs Postgres running:  docker compose --profile m2 up -d --wait postgres
 # Run from your own PowerShell (the live feed needs your network). Hourly unattended use: scripts/install_collector.ps1
 param(

@@ -1,3 +1,5 @@
+> **Archived 2026-10-20.** This is the original long-form design and plan, written before most of the system existed and updated until 2026-10-19. It is kept for its reasoning (requirements, failure contract, capacity model, Kubernetes and entity-analysis designs). For what was actually built, read [ARCHITECTURE.md](../ARCHITECTURE.md) and the [guides](../guides/); for current status and next steps, read [PROJECT_PLAN.md](../PROJECT_PLAN.md). Status and next-step sections below are out of date.
+
 # BlockPulse: project plan and system description
 
 | Document field | Value |
@@ -8,13 +10,13 @@
 | Intended builder | One developer working part-time |
 | Primary environment | Local machine; containers before Kubernetes |
 | Hardware (measured 2026-10-09) | Intel i5-1340P (12 cores / 16 threads), 15.6 GiB RAM, ~66 GiB free on D:; Windows 11 + Docker Desktop |
-| Cloud posture | Optional, temporary experiments; no always-on cloud environment. A self-expiring AWS collector is ready ([AWS_DEPLOY.md](AWS_DEPLOY.md)) |
+| Cloud posture | Optional, temporary experiments; no always-on cloud environment. A self-expiring AWS collector is ready ([AWS_DEPLOY.md](../guides/08-aws.md)) |
 | Origin | The supplied Bitcoin anomaly pipeline discussion and system-design draft |
 | Role of this document | Canonical reference for the idea, design, scope, implementation sequence, and progress |
 
-This document describes the full intended project. What is actually built is described in [Current architecture](ARCHITECTURE_CURRENT.md); where the build differs from this plan, the difference is called out with an **As built** note. Targets, resource allocations, and schedules are planning assumptions until a measurement is attached. The proposed defaults below make the project actionable without treating every decision in the original discussion as settled.
+This document describes the full intended project. What is actually built is described in [Current architecture](../ARCHITECTURE.md); where the build differs from this plan, the difference is called out with an **As built** note. Targets, resource allocations, and schedules are planning assumptions until a measurement is attached. The proposed defaults below make the project actionable without treating every decision in the original discussion as settled.
 
-**Naming.** Milestones are M0-M4 (Section 16). Two early documents use older "phase" names: [Phase 0](PHASE0.md) is the M0 source-validation work, and [Phase 1](PHASE1.md) is the rule baseline, which is the first part of M2. Both names stay as file names; new work uses M-numbers.
+**Naming.** Milestones are M0-M4 (Section 16). Two early documents use older "phase" names: [Phase 0](../guides/01-capture-and-process.md) is the M0 source-validation work, and [Phase 1](../guides/02-structural-rules.md) is the rule baseline, which is the first part of M2. Both names stay as file names; new work uses M-numbers.
 
 Quick navigation:
 
@@ -520,7 +522,7 @@ Buffer records with a time/size cap, finish the object, verify its checksum, pub
 
 **As built (M1):** the Parquet archiver writes **one small Zstandard Parquet file per Kafka message** under a run directory plus a single `manifest.json` with running totals. A stable file name per message ID makes restarts safe. Offset-range manifests, hourly partitioning, and compaction are still planned.
 
-**As built (M2):** Postgres holds `transactions`, `scores`, `lifecycle_events`, and `schema_migrations` (see the [M2 guide](M2_POSTGRES.md)). The planned `alerts`, `evaluation_runs`, and `source_gaps` tables do not exist yet: an alert is a flagged row in `scores`, and gaps stay in the capture summaries. The 7-day score retention policy is not implemented.
+**As built (M2):** Postgres holds `transactions`, `scores`, `lifecycle_events`, and `schema_migrations` (see the [M2 guide](../guides/04-postgres-api-dashboard.md)). The planned `alerts`, `evaluation_runs`, and `source_gaps` tables do not exist yet: an alert is a flagged row in `scores`, and gaps stay in the capture summaries. The 7-day score retention policy is not implemented.
 
 Compaction creates a new manifest generation; only after it is validated may lifecycle cleanup remove superseded objects. Tiny low-volume batches are acceptable initially. Do not implement a complex compactor before basic archival and replay are reliable.
 
@@ -626,7 +628,7 @@ For the private profile, keep application/data ingress restricted to relevant se
 
 Terraform should create tagged experiment resources, record region and expiry time, and provide a teardown inventory. Keep backend/bootstrap resources identified separately. No ALB, public domain, RDS, ElastiCache, or MSK is needed for the default experiment.
 
-**As built (2026-10-15): the data collector, E3a.** [`infra/aws/terraform/`](../infra/aws/terraform/) creates one t4g.small Amazon Linux 2023 instance in a dedicated VPC with one public subnet and an internet gateway (no NAT), a security group with no inbound rules and outbound TCP 443 only, IMDSv2, an encrypted gp3 disk, Session Manager access, a least-privilege instance role, a private TLS-only S3 bucket with 30-day expiry, and an optional budget alert. It runs the collector as hardened systemd services (capture loop, 10-minute process-and-upload timer, deadline poweroff), not Compose: the job needs no other services. The deadline is fixed at creation and tagged `ExpiresAt`. Local state; no remote backend, since one person runs one short experiment. Verified offline only: `terraform test` with a mocked provider, and the bootstrap plus real systemd units in Amazon Linux 2023 containers. Not yet applied to a real account. Runbook, costs and verification table: [AWS_DEPLOY.md](AWS_DEPLOY.md).
+**As built (2026-10-15): the data collector, E3a.** [`infra/aws/terraform/`](../../infra/aws/terraform) creates one t4g.small Amazon Linux 2023 instance in a dedicated VPC with one public subnet and an internet gateway (no NAT), a security group with no inbound rules and outbound TCP 443 only, IMDSv2, an encrypted gp3 disk, Session Manager access, a least-privilege instance role, a private TLS-only S3 bucket with 30-day expiry, and an optional budget alert. It runs the collector as hardened systemd services (capture loop, 10-minute process-and-upload timer, deadline poweroff), not Compose: the job needs no other services. The deadline is fixed at creation and tagged `ExpiresAt`. Local state; no remote backend, since one person runs one short experiment. Verified offline only: `terraform test` with a mocked provider, and the bootstrap plus real systemd units in Amazon Linux 2023 containers. Not yet applied to a real account. Runbook, costs and verification table: [AWS_DEPLOY.md](../guides/08-aws.md).
 
 ### 13.5 Security baseline
 
@@ -802,13 +804,13 @@ Suggested order, one small session each. Each step should end with a test, a sho
 
 | Step | Task | Status |
 | --- | --- | --- |
-| M2.0 | Structural features (`transaction-v2`) and explainable rule baseline (`structural-rules-v1`) | Done; see [Phase 1](PHASE1.md) |
-| M2.1 | Add Postgres to Compose; write a `transactions` + `scores` schema with a migration | Done 2026-10-12; see [M2 Postgres](M2_POSTGRES.md) |
-| M2.2 | `blockpulse load-results`: load screened JSONL into Postgres with unique keys; prove re-running adds no duplicate rows | Done 2026-10-12; see [M2 guide](M2_POSTGRES.md) |
-| M2.3 | Read-only FastAPI: `/healthz`, `/tx/{txid}`, `/alerts` with pagination | Done 2026-10-12; see [M2 guide](M2_POSTGRES.md) |
-| M2.4 | Lifecycle projection: apply added/removed/mined/replaced events to `transactions` | Done 2026-10-12; see [M2 guide](M2_POSTGRES.md) |
-| M2.5 | First Grafana dashboard over Postgres (alerts/hour, rule counts, event counts) | Done 2026-10-12; see [M2 guide](M2_POSTGRES.md) |
-| M2.6 | End-to-end trace of one transaction plus a small offline demo fixture | Done 2026-10-12; see [M2 guide](M2_POSTGRES.md) |
+| M2.0 | Structural features (`transaction-v2`) and explainable rule baseline (`structural-rules-v1`) | Done; see [Phase 1](../guides/02-structural-rules.md) |
+| M2.1 | Add Postgres to Compose; write a `transactions` + `scores` schema with a migration | Done 2026-10-12; see [M2 Postgres](../guides/04-postgres-api-dashboard.md) |
+| M2.2 | `blockpulse load-results`: load screened JSONL into Postgres with unique keys; prove re-running adds no duplicate rows | Done 2026-10-12; see [M2 guide](../guides/04-postgres-api-dashboard.md) |
+| M2.3 | Read-only FastAPI: `/healthz`, `/tx/{txid}`, `/alerts` with pagination | Done 2026-10-12; see [M2 guide](../guides/04-postgres-api-dashboard.md) |
+| M2.4 | Lifecycle projection: apply added/removed/mined/replaced events to `transactions` | Done 2026-10-12; see [M2 guide](../guides/04-postgres-api-dashboard.md) |
+| M2.5 | First Grafana dashboard over Postgres (alerts/hour, rule counts, event counts) | Done 2026-10-12; see [M2 guide](../guides/04-postgres-api-dashboard.md) |
+| M2.6 | End-to-end trace of one transaction plus a small offline demo fixture | Done 2026-10-12; see [M2 guide](../guides/04-postgres-api-dashboard.md) |
 
 A streaming feature/score worker (Kafka `features`/`scored` topics) is optional within M2; the offline path is enough to prove persistence and the API first.
 
@@ -826,18 +828,18 @@ A streaming feature/score worker (Kafka `features`/`scored` topics) is optional 
 
 **Done when:** another run can reconstruct the evaluation from manifests and versions, and the selected detector is justified by evidence. Keeping the baseline as champion is an acceptable outcome.
 
-**Outcome (2026-10-14):** complete. The chain reproduced byte for byte (6 of 6 checks), and the rules remain champion because the model failed three of four promotion criteria. See the [M3 report](M3_REPORT.md).
+**Outcome (2026-10-14):** complete. The chain reproduced byte for byte (6 of 6 checks), and the rules remain champion because the model failed three of four promotion criteria. See the [M3 report](../guides/06-ml-evaluation.md).
 
 Suggested steps, one session each:
 
 | Step | Task | Status |
 | --- | --- | --- |
-| M3.1 | Dataset manifest and chronological split by session, with checksums | Done 2026-10-14; see [M3 dataset](M3_DATASET.md) |
-| M3.2 | Fit an Isolation Forest on the train split (bounded size, fixed seed); record fit time and peak memory | Done 2026-10-14; see [M3 model](M3_MODEL.md) |
-| M3.3 | Calibrate a threshold on the calibration split for a stated alerts-per-1,000 budget; score the test split; compare flags with the rules | Done 2026-10-14; see [M3 evaluation](M3_EVALUATION.md) and the [first results](experiments/2026-10-14-m3-first-evaluation.md) |
-| M3.4 | Structural injection sweep and benign controls (labeled synthetic fixtures, kept out of training) | Done 2026-10-14; see the [sweep results](experiments/2026-10-14-m3-synthetic-sweep.md) |
-| M3.5 | Model artifact with metadata (feature hash, seed, dataset manifest ID), compatibility check, rollback; MLflow only if it earns its place | Done 2026-10-14; see [M3 registry](M3_REGISTRY.md). MLflow not adopted |
-| M3.6 | Evaluation report: what is supported, what is not | Done 2026-10-14; see the [M3 report](M3_REPORT.md) and `scripts/reproduce_m3.ps1` |
+| M3.1 | Dataset manifest and chronological split by session, with checksums | Done 2026-10-14; see [M3 dataset](../guides/06-ml-evaluation.md#1-dataset-manifest-and-chronological-split) |
+| M3.2 | Fit an Isolation Forest on the train split (bounded size, fixed seed); record fit time and peak memory | Done 2026-10-14; see [M3 model](../guides/06-ml-evaluation.md#2-the-model-isolation-forest) |
+| M3.3 | Calibrate a threshold on the calibration split for a stated alerts-per-1,000 budget; score the test split; compare flags with the rules | Done 2026-10-14; see [M3 evaluation](../guides/06-ml-evaluation.md#3-threshold-and-comparison-with-the-rules) and the [first results](../experiments/2026-10-14-m3-first-evaluation.md) |
+| M3.4 | Structural injection sweep and benign controls (labeled synthetic fixtures, kept out of training) | Done 2026-10-14; see the [sweep results](../experiments/2026-10-14-m3-synthetic-sweep.md) |
+| M3.5 | Model artifact with metadata (feature hash, seed, dataset manifest ID), compatibility check, rollback; MLflow only if it earns its place | Done 2026-10-14; see [M3 registry](../guides/06-ml-evaluation.md#5-detector-bundles-registry-and-promotion-gate). MLflow not adopted |
+| M3.6 | Evaluation report: what is supported, what is not | Done 2026-10-14; see the [M3 report](../guides/06-ml-evaluation.md) and `scripts/reproduce_m3.ps1` |
 
 ### M4 — Reliability and a complete local release
 
@@ -859,9 +861,9 @@ The project's goal is to strengthen data engineering and data processing skills 
 
 | Step | What | Data engineering skills it builds | Status |
 | --- | --- | --- | --- |
-| DE1 | Partitioned Parquet lake (`dt`/`hour`, file per session per partition) with a contract-based quality gate, quarantine and per-session quality reports, built by `process-pending` | Columnar storage, partitioning, small-file avoidance, schema as code, data contracts, idempotent rebuilds | **Done** 2026-10-16 ([lake](LAKE.md)) |
-| DE2 | Glue tables with partition projection, an Athena workgroup with a scan cap, saved queries; the same SQL runs locally in DuckDB | Data lake querying, catalog management, cost-aware SQL, one SQL for local and cloud | **Done** 2026-10-16, verified offline ([lake](LAKE.md#query-it-in-aws-athena)) |
-| E3a | Deploy the AWS collector for about 96 hours; the lake fills in S3 and is queryable in Athena | Running a pipeline in the cloud with IaC, monitoring by status files, teardown | **Ready; owner deploys** ([AWS_DEPLOY.md](AWS_DEPLOY.md)) |
+| DE1 | Partitioned Parquet lake (`dt`/`hour`, file per session per partition) with a contract-based quality gate, quarantine and per-session quality reports, built by `process-pending` | Columnar storage, partitioning, small-file avoidance, schema as code, data contracts, idempotent rebuilds | **Done** 2026-10-16 ([lake](../guides/05-lake-and-athena.md)) |
+| DE2 | Glue tables with partition projection, an Athena workgroup with a scan cap, saved queries; the same SQL runs locally in DuckDB | Data lake querying, catalog management, cost-aware SQL, one SQL for local and cloud | **Done** 2026-10-16, verified offline ([lake](../guides/05-lake-and-athena.md#query-it-in-aws-athena)) |
+| E3a | Deploy the AWS collector for about 96 hours; the lake fills in S3 and is queryable in Athena | Running a pipeline in the cloud with IaC, monitoring by status files, teardown | **Ready; owner deploys** ([AWS_DEPLOY.md](../guides/08-aws.md)) |
 | DE3 | Proof artifacts (the core of M4): a replay load test with measured throughput and latency on a day of data; failure drills (kill a consumer, Postgres, the broker) showing no loss and no duplicate rows; CI green on GitHub; a clean pinned environment | Benchmarking, reliability engineering, at-least-once correctness, CI | **In progress.** Done 2026-10-19: model splits read from the lake (3.4x faster, identical rows), manifests declare row order, `verify-dataset`, reproduction fixed for growing data. Open: pinned environment, GitHub/CI, load test, failure drills |
 | DE4 | Modeling layer with dbt on the lake (dbt-duckdb locally, dbt-athena optional): staging and mart models (`fct_transactions`, `fct_hourly_activity`, `dim_capture_sessions`), dbt tests, generated docs and lineage | SQL modeling, layered transformations, data tests, documentation | Planned |
 | DE5 | Airflow DAG over the batch tier, run per date partition, with a demonstrated backfill of past dates (safe because every stage is idempotent) | Orchestration, scheduling, backfills, retries | Planned; the DAG skeleton exists, the image download failed once |
@@ -910,7 +912,7 @@ Use exact equality for integer/categorical features. For floating-point output, 
 
 Start CI with formatting, lint/type checks, unit/contract tests, and a bounded integration/equivalence suite. Add container scanning and image publication when deployment exists. Multi-architecture builds and repeated long benchmarks are not required on every commit.
 
-**As built (2026-10-15):** [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) runs three jobs on every push and pull request: pytest with a Postgres service container (so the database tests run too), Terraform `fmt`/`validate`/`test` with the mocked AWS provider, and shellcheck plus both Amazon Linux 2023 container rehearsals. It has not run on GitHub yet; the same checks pass locally. Lint and type checks are not in CI yet.
+**As built (2026-10-15):** [`.github/workflows/ci.yml`](../../.github/workflows/ci.yml) runs three jobs on every push and pull request: pytest with a Postgres service container (so the database tests run too), Terraform `fmt`/`validate`/`test` with the mocked AWS provider, and shellcheck plus both Amazon Linux 2023 container rehearsals. It has not run on GitHub yet; the same checks pass locally. Lint and type checks are not in CI yet.
 
 ### 17.2 Core release checklist
 
@@ -951,7 +953,7 @@ BlockPulse/
   data/                           # ignored local datasets and artifacts
 ```
 
-[Current architecture](ARCHITECTURE_CURRENT.md) maps every module. Split the flat package into sub-packages once a module grows past easy reading, not in advance. The target tree below remains the longer-term shape.
+[Current architecture](../ARCHITECTURE.md) maps every module. Split the flat package into sub-packages once a module grows past easy reading, not in advance. The target tree below remains the longer-term shape.
 
 ```text
 BlockPulse/
@@ -1006,10 +1008,10 @@ These are proposed defaults for the first implementation. Change them when evide
 | D10 | Entity state is optional and single-active | Keep graph semantics and recovery tractable |
 | D11 | Core completion precedes Kubernetes/cloud | Ensure infrastructure expands a working project |
 | D12 | Cloud runs are temporary | Learn deployment and cost without a recurring hosting commitment |
-| D13 | The rule baseline stays champion until a model clears a recorded promotion gate | Decided 2026-10-14 ([M3 report](M3_REPORT.md)); revisit with more data, labels, or a better model |
+| D13 | The rule baseline stays champion until a model clears a recorded promotion gate | Decided 2026-10-14 ([M3 report](../guides/06-ml-evaluation.md)); revisit with more data, labels, or a better model |
 | D14 | Local append-only detector registry instead of MLflow | Same register/promote/rollback operations without another service; revisit with several models or collaborators |
-| D15 | One collector implementation (`collect-loop`, `process-pending`, `sync-pending`) shared by every runner | Decided 2026-10-15: the laptop task, Airflow and AWS differ only in scheduling, so behavior and tests are shared. Airflow is optional and unverified ([collection](M4_COLLECTION.md)) |
-| D16 | Pull a minimal AWS run (E3a) ahead of M4 to collect data | Decided 2026-10-15: the M3 rerun needs days of continuous data, which a laptop can't reliably provide. Smallest profile: one instance, no NAT, systemd instead of Compose, self-expiring, about $3 ([AWS_DEPLOY.md](AWS_DEPLOY.md)) |
+| D15 | One collector implementation (`collect-loop`, `process-pending`, `sync-pending`) shared by every runner | Decided 2026-10-15: the laptop task, Airflow and AWS differ only in scheduling, so behavior and tests are shared. Airflow is optional and unverified ([collection](../guides/07-collection.md)) |
+| D16 | Pull a minimal AWS run (E3a) ahead of M4 to collect data | Decided 2026-10-15: the M3 rerun needs days of continuous data, which a laptop can't reliably provide. Smallest profile: one instance, no NAT, systemd instead of Compose, self-expiring, about $3 ([AWS_DEPLOY.md](../guides/08-aws.md)) |
 | D18 | The project's purpose is data engineering skill; remaining work follows the DE roadmap in Section 16 | Decided 2026-10-16 after reviewing outside advice: lake and Athena before the AWS run, then proof artifacts, dbt, Airflow, Kubernetes. Anomaly detection stays as the use case |
 | D19 | One schema and one SQL for local and cloud: the Python lake contract generates the Glue columns, and DuckDB views mirror the Athena tables | Decided 2026-10-16: catalog drift is caught by a test, and every query is tested offline before it costs anything |
 | D17 | Infrastructure is tested offline before any deploy | Terraform tests with mocked providers and container rehearsals of the instance run locally and in CI; nothing is applied to a real account from an automated session |
@@ -1030,7 +1032,7 @@ When a choice becomes implementation-critical, add a short decision note with co
 | Stateful replay is too complex | Isolate it behind the core release | Stop at transaction-level features |
 | Too many services slow delivery | Review milestone scope before adding services | Turn off optional profiles; consolidate application workers |
 | Cloud quote exceeds the envelope | Price the selected profile | Shorten the run, simplify it, or skip cloud |
-| A cloud run is forgotten and keeps billing | Deadline poweroff, `ExpiresAt` tag, budget alert, 30-day bucket expiry | `terraform destroy` from the saved state; the teardown checklist in [AWS_DEPLOY.md](AWS_DEPLOY.md) |
+| A cloud run is forgotten and keeps billing | Deadline poweroff, `ExpiresAt` tag, budget alert, 30-day bucket expiry | `terraform destroy` from the saved state; the teardown checklist in [AWS_DEPLOY.md](../guides/08-aws.md) |
 | The AWS instance misses something it needs (outbound HTTPS only) | Read the bootstrap log through Session Manager | Widen egress deliberately, record why, and retest |
 | Part-time schedule slips | Re-estimate at milestone boundaries | Finish the current release boundary before adding an extension |
 
@@ -1044,7 +1046,7 @@ Question asked: do the M3 findings threaten the project? **No.** What they show 
 | Threshold rate moved 2.6x between two windows | A data problem. Calibration needs many windows across hours and days; one day of continuous collection gives dozens. |
 | No independent labels | Real limit, and more traffic does not fix it. Conclusions stay about detector behavior and agreement, never accuracy. A small hand-reviewed sample is the only route to labels. |
 | Only about 45 minutes of data so far | Not a calendar problem. Measured traffic is about 3,300 added transactions per 10 minutes, so about 480,000 a day against 15,515 collected so far. Continuous collection reaches useful volume in one to three days. Covering a weekend needs a weekend, and no engineering shortcut changes that. |
-| Disk | The binding resource. One hour of capture plus processing is about 330 MB uncompressed, about 8 GB a day, against about 62 GB free. Compression and a free-space guard are needed (see [collection](M4_COLLECTION.md)); a few days fits, a month does not. |
+| Disk | The binding resource. One hour of capture plus processing is about 330 MB uncompressed, about 8 GB a day, against about 62 GB free. Compression and a free-space guard are needed (see [collection](../guides/07-collection.md)); a few days fits, a month does not. |
 | Public feed drops every few minutes (ping timeouts) and the reconnect limit is per capture, not per connection | A real operational limit: long captures must allow many reconnects, and coverage will always have small gaps that are recorded as a lower bound. |
 | Environment is a reused system Python with a SciPy/NumPy mismatch | Small risk, one afternoon to fix with a pinned clean venv. |
 
@@ -1060,16 +1062,16 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 
 | Milestone | Status | Evidence / next action |
 | --- | --- | --- |
-| Project reference | Maintained | This document, README, and [CLAUDE.md](../CLAUDE.md) working notes |
-| M0: source and hardware validation | Complete (bounded local prototype) | [Connectivity](experiments/2026-10-08-source-connectivity.md) and [validation](experiments/2026-10-09-phase0-phase1-validation.md): ten-minute capture with 402 messages and 6,983 events; all four lifecycle types; byte-identical replay; host snapshot; reconnect gaps recorded |
-| M1: ingest/archive/replay | Complete (local) | [M1 guide](M1_KAFKA.md): capture-to-Kafka, saved-data replay, bounded REST enrichment, JSONL + Parquet archives, restart safety; 402-message replay reproduced 2,732 features exactly. **Open:** live `capture-kafka` from the user's own shell (the agent runtime was blocked from the public WebSocket) |
-| M2: features/baseline/API | Complete (local) | [M2 guide](M2_POSTGRES.md): Postgres store with duplicate-safe loads, lifecycle projection, read-only API, Grafana dashboard, `trace` command, offline demo script. Real capture reproduced exactly: 2,732 scores (73 flagged), 6,983 events, 6,259 transactions. **Not done from the M2 list:** a streaming feature/score worker (offline path only), `source_gaps`/`evaluation_runs`/`alerts` tables, and labeled evaluation (M3) |
-| M3: ML/evaluation | Complete (local) | [M3 report](M3_REPORT.md): manifest, Isolation Forest, calibrated threshold, held-out test, 780-case synthetic sweep, detector bundles with registry and gate, and a reproduction script. Rules remain champion; the model is a registered challenger. Calibration and test are single 10-minute windows and there are no labels, so conclusions are limited to detector behavior |
+| Project reference | Maintained | This document, README, and [CLAUDE.md](../../CLAUDE.md) working notes |
+| M0: source and hardware validation | Complete (bounded local prototype) | [Connectivity](../experiments/2026-10-08-source-connectivity.md) and [validation](../experiments/2026-10-09-phase0-phase1-validation.md): ten-minute capture with 402 messages and 6,983 events; all four lifecycle types; byte-identical replay; host snapshot; reconnect gaps recorded |
+| M1: ingest/archive/replay | Complete (local) | [M1 guide](../guides/03-kafka.md): capture-to-Kafka, saved-data replay, bounded REST enrichment, JSONL + Parquet archives, restart safety; 402-message replay reproduced 2,732 features exactly. **Open:** live `capture-kafka` from the user's own shell (the agent runtime was blocked from the public WebSocket) |
+| M2: features/baseline/API | Complete (local) | [M2 guide](../guides/04-postgres-api-dashboard.md): Postgres store with duplicate-safe loads, lifecycle projection, read-only API, Grafana dashboard, `trace` command, offline demo script. Real capture reproduced exactly: 2,732 scores (73 flagged), 6,983 events, 6,259 transactions. **Not done from the M2 list:** a streaming feature/score worker (offline path only), `source_gaps`/`evaluation_runs`/`alerts` tables, and labeled evaluation (M3) |
+| M3: ML/evaluation | Complete (local) | [M3 report](../guides/06-ml-evaluation.md): manifest, Isolation Forest, calibrated threshold, held-out test, 780-case synthetic sweep, detector bundles with registry and gate, and a reproduction script. Rules remain champion; the model is a registered challenger. Calibration and test are single 10-minute windows and there are no labels, so conclusions are limited to detector behavior |
 | M4: reliable local release | Not started | Next. Starts with a clean pinned environment, then the live Kafka smoke test and failure experiments |
 | E1: entity analysis | Deferred | Optional; gate on data coverage and memory |
 | E2: Kubernetes/networking | Deferred | Optional; gate on completed local core |
-| DE1-DE2: lake and Athena | Done | [Lake guide](LAKE.md): partitioned Parquet with a quality gate (0 of 57,857 real rows quarantined), four shared queries run on the real lake in DuckDB; Glue tables with partition projection, scan-capped Athena workgroup and saved queries in Terraform (tested with a mocked provider) |
-| E3: AWS experiment | E3a complete | Ran 2026-10-15 to 2026-10-19: 89 hourly sessions, 0 failures, 2.65 M scored transactions; 17.9 GB downloaded and verified byte for byte; all 30 resources destroyed and checked (no buckets, VPCs, volumes, IPs, roles left); actual cost about $0.80, covered by credits. Destroy hit a provider bug listing the full bucket (`token too long`); emptied with `aws s3 rm --recursive`, then destroy finished. M3 rerun: [report](experiments/2026-10-19-m3-rerun-aws-data.md) |
+| DE1-DE2: lake and Athena | Done | [Lake guide](../guides/05-lake-and-athena.md): partitioned Parquet with a quality gate (0 of 57,857 real rows quarantined), four shared queries run on the real lake in DuckDB; Glue tables with partition projection, scan-capped Athena workgroup and saved queries in Terraform (tested with a mocked provider) |
+| E3: AWS experiment | E3a complete | Ran 2026-10-15 to 2026-10-19: 89 hourly sessions, 0 failures, 2.65 M scored transactions; 17.9 GB downloaded and verified byte for byte; all 30 resources destroyed and checked (no buckets, VPCs, volumes, IPs, roles left); actual cost about $0.80, covered by credits. Destroy hit a provider bug listing the full bucket (`token too long`); emptied with `aws s3 rm --recursive`, then destroy finished. M3 rerun: [report](../experiments/2026-10-19-m3-rerun-aws-data.md) |
 
 Test suite on 2026-10-16: 119 passed and 1 skipped with `BLOCKPULSE_TEST_DSN` set (the skip is the optional loopback test); 105 passed and 15 skipped without it. Terraform: 9 passed. Container rehearsals: all passed.
 
@@ -1078,7 +1080,7 @@ Test suite on 2026-10-16: 119 passed and 1 skipped with `BLOCKPULSE_TEST_DSN` se
 1. **Push to GitHub** (owner: create an empty repository, then `git remote add origin <url>` and `git push -u origin main`) so CI runs for the first time; fix whatever it finds.
 2. **DE3, rest:** a clean pinned environment (lock file), then the replay load test and failure drills.
 3. **DE4:** dbt models and tests on the lake.
-4. Decide an alert budget; check promotion-gate decisions across seeds (see the [rerun report](experiments/2026-10-19-m3-rerun-aws-data.md)).
+4. Decide an alert budget; check promotion-gate decisions across seeds (see the [rerun report](../experiments/2026-10-19-m3-rerun-aws-data.md)).
 
 **Housekeeping:** Kafka (up to 1 GiB), Postgres (512 MB), and Grafana (384 MB) are separate Compose profiles. Stop what you aren't using (`docker compose --profile m1 stop`, `docker compose --profile m2 stop`); data volumes persist.
 
@@ -1092,7 +1094,7 @@ Test suite on 2026-10-16: 119 passed and 1 skipped with `BLOCKPULSE_TEST_DSN` se
 6. Choose the smallest next task that advances the current milestone.
 7. Update the tracker, measured assumptions, and next task before stopping.
 
-For a detailed description of the working system rather than the future target, read [Current architecture and data flow](ARCHITECTURE_CURRENT.md). It maps the actual Python modules and CLI stages to their inputs, outputs, technologies, and limitations.
+For a detailed description of the working system rather than the future target, read [Current architecture and data flow](../ARCHITECTURE.md). It maps the actual Python modules and CLI stages to their inputs, outputs, technologies, and limitations.
 
 Use this short handoff format at meaningful stopping points:
 

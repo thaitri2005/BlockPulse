@@ -1,8 +1,8 @@
-# Phase 1: explainable structural screening
+# 02 · Structural rules
 
-> **Status:** complete. This is step M2.0 of milestone M2 in the [project plan](PROJECT_PLAN.md). Detection still runs offline on `features.jsonl`; persisting results to Postgres is the next M2 step.
+Three transparent rules screen each transaction for unusual shape; they are the current champion detector ([ML evaluation](06-ml-evaluation.md)). Milestone M2.0.
 
-Phase 1's first offline structural baseline is implemented and checked against controlled cases and a ten-minute real observation. This validates rule mechanics, not real-world detection quality.
+The first offline structural baseline is implemented and checked against controlled cases and a ten-minute real observation. This validates rule mechanics, not real-world detection quality.
 
 It adds a small offline rules layer after Phase 0's capture and feature extraction:
 
@@ -70,10 +70,35 @@ It writes `cases.csv` and `cases.jsonl` with the expected and actual rule IDs, p
 
 “Expected rule IDs” means the rule pattern the synthetic case was designed to exercise. It is a check that the code behaves as specified, not a fraud label or precision/recall metric. These controls test deterministic behavior and threshold sensitivity only; they do not estimate real-world detection quality.
 
-When reviewing recorded rows, use the short [Phase 1 review rubric](PHASE1_REVIEW_RUBRIC.md). It separates rule correctness, data quality, independently verified benign context, and unknown context.
+When reviewing recorded rows, use the short [Phase 1 review rubric](02-structural-rules.md#review-rubric). It separates rule correctness, data quality, independently verified benign context, and unknown context.
 
-## Current limits and next learning step
+## Limits
 
-The ten-minute real capture produced 2,732 complete feature rows and 73 structural signals. The rules and each signal were checked against the archived inputs, but the sample has no independent labels, so calibration and detection quality remain unknown. The controlled lab highlights benign shapes that also trigger the rules. The [manual-review rubric](PHASE1_REVIEW_RUBRIC.md) is ready for future labeled evaluation. Keep controlled results separate from real observations; do not call synthetic rule checks accuracy.
+The ten-minute real capture produced 2,732 complete feature rows and 73 structural signals. The rules and each signal were checked against the archived inputs, but the sample has no independent labels, so calibration and detection quality remain unknown. The controlled lab highlights benign shapes that also trigger the rules. The [manual-review rubric](02-structural-rules.md#review-rubric) is ready for future labeled evaluation. Keep controlled results separate from real observations; do not call synthetic rule checks accuracy.
 
-Next: persist versioned screen results in Postgres (M2.1-M2.2), then add a read-only API (M2.3). See the M2 step table in the [project plan](PROJECT_PLAN.md#m2--features-baseline-and-inspectable-results).
+Results are loaded into Postgres and served by the API ([04](04-postgres-api-dashboard.md)), and written to the lake ([05](05-lake-and-athena.md)).
+
+## Review rubric
+
+Use this checklist when looking at rows from `blockpulse detect`. It checks whether the recorded structure and the code's rule agree. It does not decide whether a transaction is good, bad, or suspicious.
+
+For each flagged row:
+
+1. **Check the record.** Confirm it came from a complete `added` transaction and the feature row has the current feature-set version. If the source entry is incomplete, classify it as a data-quality issue and do not interpret its rule result.
+2. **Check the rule.** Compare `n_in`, `n_out`, and `max_equal_output_count` with the threshold values in `summary.json`. Confirm each listed rule should fire and note any rule that is missing or unexpected.
+3. **Check context only when independently available.** A batching or consolidation explanation must come from evidence outside the rule itself. If there is no independent evidence, use `context_unknown`; do not infer intent from counts, amounts, replaceability, or a flag.
+4. **Record the review.** Use one outcome below and write the evidence briefly. Keep transaction IDs as internal references; do not publish claims about people or wallet owners.
+
+| Review outcome | Use it when |
+| --- | --- |
+| `rule_applied_as_written` | The feature values are valid and all listed signals match the recorded thresholds. |
+| `rule_mismatch` | A signal is missing or appears despite the rule condition not being met. |
+| `data_quality_issue` | Required source details or feature values are missing, malformed, or contradictory. |
+| `benign_context_independently_verified` | Separate evidence supports an ordinary explanation; cite that evidence in private notes. |
+| `context_unknown` | There is no independent context. This is the default for real mempool rows. |
+
+Review a small sample of unflagged rows too, especially rows just below a threshold. Record structural patterns the current rules do not cover. Do not call these false negatives without an independently defined target label.
+
+For a threshold comparison, change one setting at a time and preserve the original run. Write down the question before looking at results (for example, “How many of these cases match when the fan-in threshold moves from 10 to 20?”). Do not select a threshold because it appears to separate the current sample; that would only fit this sample.
+
+Do not report accuracy, precision, recall, or fraud-detection performance from the synthetic lab or unlabeled mempool sample. Those measures require independent labels, a sampling method, and a held-out dataset.

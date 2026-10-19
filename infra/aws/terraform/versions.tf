@@ -14,7 +14,7 @@ terraform {
   }
 
   # State is local on purpose: one person, one short-lived experiment. Keep terraform.tfstate until after
-  # `terraform destroy`; without it Terraform can't find what it created (see docs/AWS_DEPLOY.md).
+  # `terraform destroy`; without it Terraform can't find what it created (see docs/guides/08-aws.md).
 }
 
 provider "aws" {

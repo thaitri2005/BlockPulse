@@ -1,103 +1,106 @@
-# How BlockPulse works right now
+# Architecture
 
-BlockPulse listens for Bitcoin mempool updates, preserves what it observed, turns transaction updates into features, and screens those features with simple rules. It has a direct offline path and an optional Kafka path:
+What is built, how the pieces connect, and where the code lives. For why, see the [plan](PROJECT_PLAN.md); for how to run each part, see the [guides](guides/).
 
-    Live:       mempool WebSocket -> capture -> messages.jsonl -> process -> features -> detect
-    Streaming:  WebSocket -> local messages.jsonl + Kafka raw topic -> enrich -> Kafka enriched topic -> Parquet
-    Replay:     saved messages.jsonl -> Kafka raw topic -> JSONL archive -> process
-    Query:      process + detect output -> load-results / load-events -> Postgres -> API (serve) and Grafana
-    Unattended: collect-loop (back-to-back sessions) -> process-pending (process, screen, lake, compact, log) -> sync-pending (AWS: S3)
-    Lake:       screened + events + capture summary -> quality gate -> partitioned Parquet (dt/hour) -> DuckDB (lake-query) / Athena
+## Data flow
 
-The raw JSONL file is the source record. Kafka moves and buffers messages; it does not replace that file.
+```text
+                 public mempool WebSocket (mempool.space regional node)
+                                   |
+              capture / collect-loop (gaps recorded, 300 reconnects per session)
+                                   |
+                   data/raw/<session>/messages.jsonl      <- source of truth, never rewritten
+                      |                          \
+        process (events, features)          capture-kafka -> Kafka raw topic -> enrich -> enriched topic
+                      |                                          -> JSONL archive / Parquet archive
+        detect (structural rules)
+                      |
+     data/processed/<session>/, data/screened/<session>/
+           |                 |                         |
+   lake stage: quality   load-results / load-events   build-dataset -> train / evaluate / sweep
+   gate -> partitioned   -> Postgres -> API + Grafana  -> detector registry (champion: rules)
+   Parquet (dt/hour)
+           |
+   DuckDB (lake-query) locally, Athena over S3 in AWS
+```
 
-## What each command does
+Unattended runs wrap the same steps: `collect-loop` captures hourly sessions, `process-pending` brings every finished session up to date (process, screen, lake, compact, log, optional Postgres load), `sync-pending` uploads to S3. On AWS these run as systemd services on one instance ([08](guides/08-aws.md)).
 
-- capture connects to the public WebSocket and saves each message to messages.jsonl. It also writes connections.jsonl and summary.json so connection attempts and missed-history gaps are visible.
-- capture-kafka does the same capture, writes each envelope to the local file first, then sends it to the Kafka raw topic. If Kafka publishing fails, the local record remains.
-- kafka-init creates three Kafka topics: raw observations, enriched messages, and errors.
-- kafka-replay reads an existing messages.jsonl file and sends its envelopes to the raw topic. It does not contact the public source.
-- kafka-archive reads raw Kafka messages and saves them to another messages.jsonl file. It syncs each new line before committing its Kafka offset; if restarted, it skips duplicate message IDs.
-- kafka-enrich reads raw messages and parses lifecycle events. When an added transaction already has the fields needed for features, it makes no web request. If those fields are missing, it fetches transaction details from the mempool.space REST API under a request-per-second limit and a per-run cap. Failures are written to the Kafka error topic.
-- kafka-parquet reads enriched messages and stores them as Zstandard-compressed Parquet files. Each message ID has a stable file, so a restart does not add it twice.
-- db-init creates the Postgres tables. load-results copies screened scores into Postgres; load-events copies lifecycle events and recomputes each touched transaction's status from its evidence. Both can be repeated safely. serve runs the read-only API, and trace shows everything stored about one txid and re-derives its features from the raw capture. See the [M2 guide](M2_POSTGRES.md).
-- collect-loop captures sessions back to back into data/raw/session-* until a deadline, a session limit, or low disk; process-pending processes, screens, compacts and logs every finished session (optionally loading Postgres); sync-pending uploads each session to S3 once. collect is one session plus process-pending. The laptop task, the Airflow DAG and the AWS instance all run these. See [collection](M4_COLLECTION.md) and [AWS](AWS_DEPLOY.md).
-- process reads a saved capture JSONL file offline. It writes normalized lifecycle events, transaction features, and an error report.
-- detect reads features offline and flags three simple shapes: many inputs, many outputs, or repeated output values. A flag means unusual structure; it does not establish wrongdoing.
+Design rules that hold everywhere:
 
-Kafka consumers use a group ID to remember their progress. Reuse the same group ID and output directory to resume. A new group starts at the earliest retained message, so it can read old topic data again. Replaying a capture into a topic appends messages; avoid replaying it again unless you intend to test duplicate handling.
+- **Raw is the source of truth.** Everything downstream can be rebuilt from `data/raw`.
+- **Every stage is idempotent.** Output folders are never overwritten; finished stages are detected and skipped; Postgres loads and Kafka consumers are safe to repeat (at-least-once delivery plus idempotent sinks).
+- **One implementation per concern.** One feature function, one rule set, one lake schema (which also generates the Athena catalog), one collector for every runner.
+- **Evidence is recorded.** Summaries, quality reports, manifests and checksums make every claimed number traceable.
 
-## Where the code lives
+## Commands
+
+`python -m blockpulse --help` lists them all.
+
+| Group | Commands | Guide |
+| --- | --- | --- |
+| Capture and process | `capture`, `process`, `detect`, `lab`, `trace` | [01](guides/01-capture-and-process.md), [02](guides/02-structural-rules.md) |
+| Kafka | `kafka-init`, `capture-kafka`, `kafka-replay`, `kafka-archive`, `kafka-enrich`, `kafka-parquet` | [03](guides/03-kafka.md) |
+| Postgres and API | `db-init`, `load-results`, `load-events`, `serve` | [04](guides/04-postgres-api-dashboard.md) |
+| Lake and SQL | `lake-query`, `lake-schema` (the lake itself is built by `process-pending`) | [05](guides/05-lake-and-athena.md) |
+| ML evaluation | `build-dataset`, `verify-dataset`, `train-iforest`, `evaluate-iforest`, `sweep`, `detectors ...` | [06](guides/06-ml-evaluation.md) |
+| Unattended collection | `collect`, `collect-loop`, `process-pending`, `sync-pending` | [07](guides/07-collection.md), [08](guides/08-aws.md) |
+
+## Code
+
+Python package `src/blockpulse/` (about 4,500 lines, flat on purpose):
 
 | Module | Lines | Role |
 | --- | ---: | --- |
-| `cli.py` | 207 | Command-line entry point; wires every command below to its module |
-| `capture.py` | 198 | Bounded WebSocket capture, reconnects, gap records, summary |
-| `events.py` | 118 | Parses one saved message into normalized lifecycle events |
-| `features.py` | 66 | Pure feature function shared by every path (`transaction-v2`) |
-| `process.py` | 131 | Offline: capture JSONL to events, features, errors |
-| `storage.py` | 56 | Run directories that are never overwritten; summary writing |
-| `detector.py` | 78 | The three structural rules (`structural-rules-v1`) |
-| `detect.py` | 108 | Offline: features to screened rows and alerts |
-| `lab.py` | 144 | Synthetic rule cases and threshold sweep |
-| `kafka_pipeline.py` | 388 | Topic creation, raw publisher, replay producer, JSONL archive consumer |
-| `kafka_workers.py` | 156 | Enrichment consumer loop |
-| `enrichment.py` | 157 | Rate-limited, budgeted REST fetch for incomplete transactions |
-| `parquet_archive.py` | 213 | Enriched topic to Parquet files and manifest |
-| `db.py` + `migrations/` | 56 | Postgres connection and forward-only SQL migrations (`db-init`) |
-| `results.py` | 83 | Duplicate-safe load of screened scores (`load-results`) |
-| `lifecycle.py` | 111 | Lifecycle evidence load and status projection (`load-events`) |
-| `api.py` | 176 | Read-only FastAPI app (`serve`) |
-| `trace.py` | 62 | Stored record to raw capture line, with a feature recomputation check |
-| `lake.py` | ~300 | Lake table contracts, quality gate with quarantine, partitioned Parquet writer, Glue schema export (`lake-schema`) |
-| `analytics.py` | ~50 | DuckDB views over the lake mirroring the Athena tables (`lake-query`) |
-| `collector.py` | ~300 | Unattended collection: capture loop, idempotent processing of finished sessions, compaction, lock, S3 upload (`collect`, `collect-loop`, `process-pending`, `sync-pending`) |
-| `registry.py` | ~270 | Detector bundles, append-only registry, promotion gate, rollback, scoring through a bundle (`detectors ...`) |
-| `sweep.py` | ~190 | Seeded, consistent synthetic transactions with labels; scores them with the rules and the calibrated model (`sweep`) |
-| `evaluate.py` | ~150 | Threshold calibration, test scoring, agreement with the rules (`evaluate-iforest`) |
-| `model.py` | ~150 | Isolation Forest training, feature transforms, checksummed save/load (`train-iforest`); needs the `ml` extra |
-| `dataset.py` | ~190 | Checksummed chronological train/calibration/test manifest (`build-dataset`) and verified split loading |
+| `capture.py` | 198 | Bounded WebSocket capture, reconnects, gap records |
+| `events.py` | 118 | One saved message to normalized lifecycle events |
+| `features.py` | 66 | The shared feature function (`transaction-v2`) |
+| `process.py` | 131 | Capture JSONL to events, features and an error report |
+| `detector.py`, `detect.py`, `lab.py` | 330 | The three structural rules, offline screening, synthetic rule cases |
+| `storage.py` | 56 | Never-overwrite run folders, atomic summaries |
+| `kafka_pipeline.py`, `kafka_workers.py` | 544 | Topics, publisher, replay, archive consumer, enrichment consumer |
+| `enrichment.py`, `parquet_archive.py` | 370 | Rate-limited REST enrichment; Kafka-to-Parquet archive |
+| `db.py`, `results.py`, `lifecycle.py` + `migrations/` | 257 | Postgres migrations, duplicate-safe loads, lifecycle status projection |
+| `api.py`, `trace.py` | 238 | Read-only FastAPI; one transaction traced back to its raw message |
+| `lake.py`, `analytics.py` | 356 | Lake contracts, quality gate, partitioned writer, Glue schema export; DuckDB views |
+| `dataset.py` | 320 | Checksummed chronological manifests, lake- or JSONL-backed split loading |
+| `model.py`, `evaluate.py`, `sweep.py`, `registry.py` | 719 | Isolation Forest, threshold calibration, synthetic sweep, detector registry and gate |
+| `collector.py` | 314 | Capture loop, idempotent session processing, lock, S3 upload |
+| `cli.py` | 453 | Command-line entry point |
 
-Kafka topics: `blockpulse.raw.v1`, `blockpulse.enriched.v1`, `blockpulse.errors.v1`. Each has 3 partitions and 7-day retention, and records are keyed by capture session ID.
-
-## Outside the Python package
+Elsewhere:
 
 | Path | What it is |
 | --- | --- |
-| `infra/aws/terraform/` | Terraform for the AWS collector (VPC, instance, S3, IAM, budget) and its offline tests (`terraform test`, mocked provider) |
-| `infra/aws/instance/` | What runs on the instance: `install.sh`, `deadline-check.sh`, and the hardened systemd units |
-| `infra/aws/build_bundle.py` | Builds the reproducible zip the instance installs |
+| `tests/` | pytest; Postgres tests opt in with `BLOCKPULSE_TEST_DSN` |
+| `analytics/queries/` | Shared SQL, run by DuckDB locally and saved as Athena named queries |
+| `infra/aws/terraform/` | The AWS collector stack (VPC, instance, S3, IAM, Glue, Athena, budget) and its mocked-provider tests |
+| `infra/aws/instance/` | `install.sh`, `deadline-check.sh` and the hardened systemd units that run on the instance |
 | `infra/aws/tests/` | Amazon Linux 2023 container rehearsals: bootstrap smoke test and real systemd end to end |
-| `analytics/queries/` | Shared demo SQL, run by DuckDB locally and saved as Athena named queries |
-| `orchestration/airflow/` | Optional Airflow DAG and image (never run) |
-| `observability/grafana/` | Provisioned Grafana datasource and dashboard |
-| `scripts/` | Laptop collection (`capture_session.ps1`, `install_collector.ps1`), M2 demo, M3 reproduction |
+| `infra/aws/build_bundle.py` | Reproducible app zip for the instance |
+| `observability/grafana/` | Provisioned datasource and dashboard |
+| `compose.yaml` | Profiles `m1` (Kafka) and `m2` (Postgres, Grafana) |
+| `scripts/` | Laptop collection task, M2 demo, M3 reproduction |
+| `examples/` | Learning exercise 1 and synthetic fixtures |
 | `.github/workflows/ci.yml` | CI: pytest with Postgres, Terraform checks, container rehearsals |
 
-## Technologies and how they fit
+## Technology
 
-Terraform describes the AWS collector; systemd runs it on the instance; the AWS CLI on the instance uploads to S3. Python runs the commands and pipeline logic. PostgreSQL stores scores and lifecycle evidence for querying; FastAPI serves them read-only; Grafana charts them from the same database. The websockets library receives live source messages. Apache Kafka runs in Docker Compose as one local KRaft broker; confluent-kafka connects Python producers and consumers to it. PyArrow writes Parquet, a compressed columnar format for later analysis. JSONL keeps the original messages inspectable and makes offline replay easy. CSV makes feature rows easy to open in a spreadsheet. pytest checks the parsing, features, Kafka behavior, and recovery rules.
+| Concern | Choice | Notes |
+| --- | --- | --- |
+| Language | Python 3.11+ | websockets, confluent-kafka, pyarrow, duckdb, psycopg, FastAPI, scikit-learn |
+| Streaming | Apache Kafka 4.3 (KRaft, one broker) | Topics `blockpulse.raw.v1`, `.enriched.v1`, `.errors.v1`; 3 partitions; keyed by capture session |
+| Raw and replay | JSONL | Inspectable; byte-identical replay |
+| Lake | Parquet + Zstandard, Hive partitions `dt`/`hour` | One file per session per partition |
+| SQL | DuckDB locally, Athena in AWS | Same queries; Glue partition projection; 1 GiB scan cap |
+| Serving | PostgreSQL 17, FastAPI, Grafana 12 | Read-only API |
+| ML | scikit-learn Isolation Forest | Local append-only registry instead of MLflow |
+| Infrastructure | Terraform (AWS provider 6.x), systemd on Amazon Linux 2023 | No inbound ports, Session Manager, self-expiring |
 
-The broker has one node, so it is a learning setup, not a highly available service. The current Parquet writer makes one small file per message for simple restart behavior. Enrichment only calls the public REST endpoint for incomplete added transactions, and the provider may return rate-limit errors. Postgres, the API, and one Grafana dashboard exist (M2). There is no trained model, streaming feature/score worker, or entity analysis yet: scoring still runs offline, and the Kafka path and the Postgres path are connected only through files.
+## Known limits
 
-## Check the verified run
-
-The broker and saved outputs from the last end-to-end run are already in the workspace. Check the broker, run the tests, then inspect the records:
-
-    docker compose --profile m1 ps
-    ./.venv/Scripts/python.exe -m pytest -q
-
-    (Get-Content data/kafka/archive-854913a015a0453dad3b15c8b8af12cc/messages.jsonl | Measure-Object -Line).Lines
-    $processed = Get-Content data/processed/kafka-854913a015a0453dad3b15c8b8af12cc-retry/summary.json | ConvertFrom-Json
-    $processed.features_written
-    $processed.event_counts
-    $processed.issue_count
-
-    $parquet = Get-Content data/archives/m1-049c29f100aa4dd68bbaac637f77527f/manifest.json | ConvertFrom-Json
-    $parquet.archive_messages_total
-    $parquet.archive_bytes
-    $parquet.consumer_lag_messages
-
-Expected results: the JSONL archive has 402 lines; processing reports 2,732 features, event counts of 2,732 added, 584 removed, 3,468 mined, and 199 replaced, with zero issues. The Parquet manifest reports 402 archived messages and zero lag. The last consumer run may show messages_archived as zero because that run was a restart check; archive_messages_total is the accumulated count.
-
-To test a new live capture, run capture-kafka with a short duration and a new output directory. That step needs a working route to the public WebSocket; the saved-data replay and the rest of the pipeline do not.
+- One Kafka broker and one instance: nothing is highly available.
+- Scoring is offline (files in, files out); no streaming feature or score worker.
+- The Kafka path and the Postgres path connect through files, not topics.
+- Postgres loading is row by row (about 4 ms a row): fine for a demo, slow for millions of rows. The lake is the analytics store.
+- The Kafka-to-Parquet archive writes one file per message (built for restart clarity); the lake is the right-sized store.

@@ -69,7 +69,7 @@ The current `structural-rules-v1` screen processed all 2,732 features and raised
 
 The counts sum to 73, so these signals did not overlap in this sample. All 2,732 feature rows were independently recomputed from their archived added-transaction payloads and matched exactly. All 73 alert rows matched the documented rule predicates when checked directly. Among unflagged rows, 8 were just below the fan-in input threshold, 6 just below the fan-out output threshold, and 15 had two repeated positive outputs where the rule requires three.
 
-These checks show that the parser, feature function, and rules agree with the stored data. They do not show that the flags are useful or harmful: the real observations have no independent benign/illicit labels, and reconnect gaps limit temporal coverage. For real rows, the review outcome remains `context_unknown` unless separate evidence exists. The synthetic lab's benign counterexamples confirm that the current features cannot distinguish benign batches or consolidation from other transactions with the same shape. See the [review rubric](../PHASE1_REVIEW_RUBRIC.md).
+These checks show that the parser, feature function, and rules agree with the stored data. They do not show that the flags are useful or harmful: the real observations have no independent benign/illicit labels, and reconnect gaps limit temporal coverage. For real rows, the review outcome remains `context_unknown` unless separate evidence exists. The synthetic lab's benign counterexamples confirm that the current features cannot distinguish benign batches or consolidation from other transactions with the same shape. See the [review rubric](../guides/02-structural-rules.md#review-rubric).
 
 ## Result and remaining scope
 

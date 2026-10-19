@@ -1,6 +1,6 @@
-# M2: query store, API, and dashboard
+# 04 · Postgres, API, and dashboard
 
-M2 turns the offline results into something you can query. Data flows into Postgres from the files the earlier stages already write; an API and a Grafana dashboard read it.
+Milestone M2 turns the offline results into something you can query. Data flows into Postgres from the files the earlier stages already write; an API and a Grafana dashboard read it.
 
 ```text
 capture messages.jsonl

@@ -80,7 +80,7 @@ resource "aws_s3_bucket_policy" "data" {
 }
 
 # The application bundle the instance installs at first boot. Updating it does not change a running
-# instance; see docs/AWS_DEPLOY.md for rolling out new code.
+# instance; see docs/guides/08-aws.md for rolling out new code.
 resource "aws_s3_object" "bundle" {
   bucket      = aws_s3_bucket.data.id
   key         = local.bundle_key

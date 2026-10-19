@@ -1,6 +1,6 @@
-# M1: ingest, enrich, archive, and replay
+# 03 · Kafka: ingest, enrich, archive, replay
 
-M1 adds a local Kafka path around the capture and processing code already used in Phase 0 and Phase 1:
+Milestone M1 adds a local Kafka path around the [capture and processing](01-capture-and-process.md) code:
 
     live WebSocket -> local JSONL + Kafka raw topic -> bounded enrichment -> enriched topic -> Parquet archive
     saved messages.jsonl -> Kafka raw topic -> JSONL archive -> offline process
@@ -31,7 +31,7 @@ To collect a bounded live session and send each message to both local JSONL and 
 
     ./.venv/Scripts/python.exe -m blockpulse capture-kafka --duration 60 --url wss://node203.sv1.mempool.space/api/v1/ws --output data/raw/m1-live
 
-This regional WebSocket endpoint was verified during the Phase 0 connectivity check; availability can change. See the [connectivity findings](experiments/2026-10-08-source-connectivity.md). The command reports Kafka acknowledgements in the capture summary.
+This regional WebSocket endpoint was verified during the Phase 0 connectivity check; availability can change. See the [connectivity findings](../experiments/2026-10-08-source-connectivity.md). The command reports Kafka acknowledgements in the capture summary.
 
 ## Run a recorded interval through the pipeline
 

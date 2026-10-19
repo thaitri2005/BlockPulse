@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run the collector's real systemd units inside an Amazon Linux 2023 container booted with systemd.
-# Driven by run_systemd_e2e.ps1 / the commands in docs/AWS_DEPLOY.md. Ends by triggering the deadline poweroff,
+# Driven by run_container_tests.sh (see docs/guides/08-aws.md). Ends by triggering the deadline poweroff,
 # so a passing run finishes with the container shutting itself down.
 set -euo pipefail
 

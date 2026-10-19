@@ -1,6 +1,6 @@
-# AWS collector: deploy, run, collect, tear down
+# 08 · AWS collector: deploy, run, collect, tear down
 
-A small, temporary, locked-down AWS setup that collects mempool data around the clock for a few days and then switches itself off. You run every command here; nothing is created in AWS until you run `terraform apply`. This is the plan's optional E3 step, pulled forward to collect data for M3 ([decision D16](PROJECT_PLAN.md#19-decision-register)).
+A small, temporary, locked-down AWS setup that collects mempool data around the clock for a few days and then switches itself off. You run every command here; nothing is created in AWS until you run `terraform apply`. It ran once, for 89 hours, for about $0.80 (results below). Roadmap step E3a ([decision D16](../PROJECT_PLAN.md#4-decisions)).
 
 ## What gets created
 
@@ -32,7 +32,7 @@ A small, temporary, locked-down AWS setup that collects mempool data around the 
 | Glue database and tables | Catalog for the Parquet lake the collector uploads | Partition projection on `dt`/`hour` (no crawler); columns generated from the Python lake contract |
 | Athena workgroup and saved queries | SQL over the lake | Settings enforced, 1 GiB scan cap per query, encrypted results that expire after 7 days |
 
-Files: Terraform in [`infra/aws/terraform/`](../infra/aws/terraform/), instance scripts and systemd units in [`infra/aws/instance/`](../infra/aws/instance/), bundle builder [`infra/aws/build_bundle.py`](../infra/aws/build_bundle.py), tests in [`infra/aws/tests/`](../infra/aws/tests/).
+Files: Terraform in [`infra/aws/terraform/`](../../infra/aws/terraform), instance scripts and systemd units in [`infra/aws/instance/`](../../infra/aws/instance), bundle builder [`infra/aws/build_bundle.py`](../../infra/aws/build_bundle.py), tests in [`infra/aws/tests/`](../../infra/aws/tests).
 
 ## Cost estimate
 
@@ -48,6 +48,8 @@ For the default 96 hours in us-west-2. Prices were checked on 2026-10-15 from se
 | Session Manager, data in, budget, Glue catalog | no charge at this scale | $0 |
 | Athena queries | about $5 per TB scanned, 10 MB minimum per query | under $0.01 for a few dozen demo queries |
 | **Total** | | **about $2.60, up to about $4.40** |
+
+**Actual, for the 89-hour run: about $0.80**, all covered by credits. Compute cost nothing under the Free plan; the estimate above assumes a Paid plan.
 
 After the deadline the instance is stopped, so compute and the public address stop billing, but the disk ($3.20/month for 40 GB) and the bucket keep billing until `terraform destroy`. New AWS accounts (since July 2025) get $100 to $200 of credits, which would cover this.
 
@@ -104,7 +106,7 @@ ls /srv/blockpulse/data/raw/
 
 ## Query the lake in Athena
 
-From the first finished session (about an hour after boot), the collector uploads partitioned Parquet to `s3://<bucket>/data/lake/`. In the Athena console choose the `blockpulse-lake` workgroup and the `blockpulse_lake` database, then run one of the saved queries (`hourly_flag_rate`, `signals_by_rule`, `lifecycle_outcomes`, `capture_coverage`). Partition projection makes new hours visible immediately. Add `WHERE dt = '2026-10-17'` (and `hour`) to scan less. The same queries run locally: `blockpulse lake-query <name>`. Details: [lake guide](LAKE.md).
+From the first finished session (about an hour after boot), the collector uploads partitioned Parquet to `s3://<bucket>/data/lake/`. In the Athena console choose the `blockpulse-lake` workgroup and the `blockpulse_lake` database, then run one of the saved queries (`hourly_flag_rate`, `signals_by_rule`, `lifecycle_outcomes`, `capture_coverage`). Partition projection makes new hours visible immediately. Add `WHERE dt = '2026-10-17'` (and `hour`) to scan less. The same queries run locally: `blockpulse lake-query <name>`. Details: [lake guide](05-lake-and-athena.md).
 
 ## Download the data and use it
 
@@ -114,7 +116,7 @@ Any time, as often as you like (it only copies what is new):
 cd D:\BlockPulse
 Invoke-Expression (terraform -chdir=infra/aws/terraform output -raw download_command)   # into data/raw, processed, screened
 .\.venv\Scripts\python.exe -m blockpulse process-pending --load-db                    # load into local Postgres (optional)
-.\.venv\Scripts\python.exe -m blockpulse build-dataset                                 # then the M3 chain, see M3_REPORT.md
+.\.venv\Scripts\python.exe -m blockpulse build-dataset                                 # then the chain in 06-ml-evaluation.md
 ```
 
 Sessions from AWS are named `session-aws-<UTC time>`, so they sit alongside your laptop sessions and the dataset manifest splits them by time like any other session.
@@ -176,16 +178,22 @@ Verified on 2026-10-15 without an AWS account:
 | Collector logic | pytest (back-to-back sessions, deadline clipping and no sliver sessions, low disk, cooldown, idempotent processing, set-aside of interrupted stages, lock, upload once, load after compaction, interrupt ends the loop) | passed |
 | Whole suite | pytest with Postgres | 119 passed, 1 skipped (optional loopback test) |
 
-Not verified, because it needs a real AWS account:
+Verified in a real account (run of 2026-10-15 to 2026-10-19, us-west-2, Free plan with credits):
 
-- That `terraform apply` succeeds against AWS (service quotas, account restrictions, a region without t4g capacity).
-- That the instance role, bucket policy and Session Manager work together as intended in a real account.
-- That the Glue tables and partition projection read the uploaded Parquet correctly in real Athena (the same files and SQL are tested locally with DuckDB).
-- That outbound HTTPS alone is enough for everything the instance needs (dnf, PyPI, S3, Systems Manager, the feed). If bootstrap fails, check `/var/log/blockpulse-bootstrap.log` first.
-- That the regional mempool.space node is reachable from AWS, and how often it disconnects there.
-- Actual cost. Record it after teardown.
+| Check | Result |
+| --- | --- |
+| `terraform apply` | 30 resources created; `aws login` credentials worked with Terraform directly |
+| Bootstrap with outbound HTTPS only | Installed from dnf and PyPI, started all services |
+| Feed reachable from AWS | 89 hourly sessions, all ran their full hour (`stop_reason: duration`), 0 failures |
+| Upload and status | `status.json` refreshed every 10 minutes; 1,691 objects (17.9 GB) uploaded |
+| Athena over the lake | Saved queries ran against the uploaded partitions via partition projection |
+| Download | 17.9 GB synced; file counts and byte totals matched S3 exactly |
+| Teardown | All 30 resources destroyed and checked (see the bucket note in Troubleshooting) |
+| Actual cost | **About $0.80**, all covered by credits: EC2 compute $0.00 (Free plan), public IPv4 $0.41, EBS $0.34, S3 $0.04 |
 
-Run all the local checks yourself with `bash infra/aws/tests/run_container_tests.sh` (Docker) and `terraform test` in `infra/aws/terraform`. CI runs them on every push (`.github/workflows/ci.yml`; not yet run on GitHub).
+Not exercised: Session Manager shell access (not needed during the run), rolling out new code to a running instance, and the deadline poweroff (the stack was destroyed about 6 hours early; the poweroff is covered by the systemd container test).
+
+Run all the local checks yourself with `bash infra/aws/tests/run_container_tests.sh` (Docker) and `terraform test` in `infra/aws/terraform`. CI runs them on every push (`.github/workflows/ci.yml`).
 
 ## Troubleshooting
 
