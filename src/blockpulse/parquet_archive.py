@@ -57,7 +57,7 @@ def archive_enriched_to_parquet(
     consumer_factory=None,
     max_messages=None,
     idle_timeout=3.0,
-    assignment_timeout=30.0,
+    assignment_timeout=60.0,
 ):
     """Write one deterministic Parquet file per message; fsync before offset commit."""
     try:
@@ -76,6 +76,9 @@ def archive_enriched_to_parquet(
         "bootstrap.servers": bootstrap_servers, "group.id": group_id,
         "client.id": "blockpulse-parquet-archive", "enable.auto.commit": False,
         "auto.offset.reset": "earliest",
+        # A crashed member is evicted after 10 s instead of the 45 s default, so a restarted worker gets its
+        # partitions back quickly (found by the enrich-crash drill, docs/guides/10-failure-drills.md).
+        "session.timeout.ms": 10000, "heartbeat.interval.ms": 3000,
     })
     output = output.resolve()
     data_dir = output / "messages"

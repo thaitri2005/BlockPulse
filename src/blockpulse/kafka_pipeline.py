@@ -295,6 +295,9 @@ def archive_topic(
         "client.id": "blockpulse-archive",
         "enable.auto.commit": False,
         "auto.offset.reset": "earliest",
+        # A crashed member is evicted after 10 s instead of the 45 s default, so a restarted worker gets its
+        # partitions back quickly (found by the enrich-crash drill, docs/guides/10-failure-drills.md).
+        "session.timeout.ms": 10000, "heartbeat.interval.ms": 3000,
     })
     consumer.subscribe([topic])
     started = _utc_now()
