@@ -199,5 +199,12 @@ def load_split(manifest: dict, split: str, root: Path) -> list[dict]:
                     continue
                 seen.add(row["txid"])
                 if session["split"] == split:
-                    rows.append(row)
+                    rows.append(_slim(row))
     return rows
+
+
+def _slim(row: dict) -> dict:
+    """Keep only what training and evaluation read. A full row with its explanation strings is several times
+    larger, and a split can hold millions of rows."""
+    return {"txid": row["txid"], "received_at": row["received_at"], "features": row["features"],
+            "is_flagged": row["is_flagged"], "signals": [{"rule_id": s["rule_id"]} for s in row["signals"]]}

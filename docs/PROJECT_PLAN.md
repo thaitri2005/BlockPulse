@@ -1069,17 +1069,16 @@ If scope must shrink, cut in this order: managed-service comparisons, AWS, entit
 | E1: entity analysis | Deferred | Optional; gate on data coverage and memory |
 | E2: Kubernetes/networking | Deferred | Optional; gate on completed local core |
 | DE1-DE2: lake and Athena | Done | [Lake guide](LAKE.md): partitioned Parquet with a quality gate (0 of 57,857 real rows quarantined), four shared queries run on the real lake in DuckDB; Glue tables with partition projection, scan-capped Athena workgroup and saved queries in Terraform (tested with a mocked provider) |
-| E3: AWS experiment | E3a ready to deploy | Data collector built and verified offline ([AWS_DEPLOY.md](AWS_DEPLOY.md)): `terraform test` 9/9 with a mocked provider (now including Athena and Glue), Amazon Linux 2023 rehearsal 7/7 (now including the lake and `pyarrow`), real systemd units pass end to end including the deadline poweroff. Not applied to a real account yet. Estimated $2.60 to $4.40 for 96 hours |
+| E3: AWS experiment | E3a ran; teardown pending | 89 hourly sessions, 0 failures, 2.65 M scored transactions over a weekend; 17.9 GB downloaded and verified. M3 rerun: test alert rate 1.15x budget (was 2.62x), benign flags 5.6% (was 43%); gate still fails 2 of 4, rules stay champion ([rerun report](experiments/2026-10-19-m3-rerun-aws-data.md)) |
 
 Test suite on 2026-10-16: 119 passed and 1 skipped with `BLOCKPULSE_TEST_DSN` set (the skip is the optional loopback test); 105 passed and 15 skipped without it. Terraform: 9 passed. Container rehearsals: all passed.
 
 **Next session, in order:**
 
-1. **Deploy the AWS collector** (owner): follow [AWS_DEPLOY.md](AWS_DEPLOY.md). After the first hour, run a saved query in the Athena console (`blockpulse-lake` workgroup) to see the lake filling up. Default run 96 hours; starting by Thursday covers a weekend.
-2. **DE3 while it runs:** clean pinned environment, push to GitHub so CI runs, then the replay load test and failure drills.
-3. **After the run:** download, rerun the M3 chain on the larger data, `terraform destroy`, record the actual cost.
-4. **DE4:** dbt models and tests on the lake.
-5. **Live Kafka smoke test (about 5 minutes):** a 60-second `capture-kafka` from your own shell ([M1 guide](M1_KAFKA.md)).
+1. **Confirm the AWS teardown** (owner): `terraform apply -var bucket_force_destroy=true`, then `terraform destroy` in `infra/aws/terraform`; check nothing tagged `Project=blockpulse` remains and record the actual cost in Section 15.2. Data is already downloaded and verified (17.9 GB).
+2. **DE3:** clean pinned environment, push to GitHub so CI runs, replay load test and failure drills. Read splits from the Parquet lake to cut the M3 chain from about 35 minutes to a few.
+3. **DE4:** dbt models and tests on the lake.
+4. Decide an alert budget; consider a fee-rate-relative feature (see the [rerun report](experiments/2026-10-19-m3-rerun-aws-data.md)).
 
 **Housekeeping:** Kafka (up to 1 GiB), Postgres (512 MB), and Grafana (384 MB) are separate Compose profiles. Stop what you aren't using (`docker compose --profile m1 stop`, `docker compose --profile m2 stop`); data volumes persist.
 
