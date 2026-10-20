@@ -1,0 +1,4 @@
+# The only build that uses the repository root as its context is the Airflow image; data/ alone is tens of GB.
+*
+!requirements.lock
+!orchestration/airflow/blockpulse.sh

@@ -94,6 +94,47 @@ services:
     mem_limit: 256m
     restart: "no"
 
+  airflow:
+    # Orchestrates the batch tier (orchestration/airflow/dags). Postgres comes from the m2 profile; without it the
+    # load task fails and retries, which is one of the drills in docs/guides/13-airflow.md.
+    build:
+      context: .
+      dockerfile: orchestration/airflow/Dockerfile
+    image: blockpulse-airflow:3.3.2
+    profiles: [airflow]
+    command:
+      - bash
+      - -c
+      - >-
+        airflow db migrate
+        && airflow pools set blockpulse_data_root 1 "Tasks that write the BlockPulse data root, one at a time"
+        && exec airflow standalone
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__PARALLELISM: "4"
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/state/airflow.db  # metadata; LocalExecutor on SQLite is fine for one machine
+      AIRFLOW__LOGGING__BASE_LOG_FOLDER: /opt/airflow/state/logs
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_ALL_ADMINS: "True"  # no login; the UI listens on 127.0.0.1 only
+      BLOCKPULSE_PIPELINE_ROOT: /opt/blockpulse/data
+      BLOCKPULSE_DSN: postgresql://blockpulse:${POSTGRES_PASSWORD:-blockpulse_dev}@postgres:5432/blockpulse_orchestrated
+    volumes:
+      - ./orchestration/airflow/dags:/opt/airflow/dags:ro
+      - ./src:/opt/blockpulse/src:ro
+      - ./analytics:/opt/blockpulse/analytics:ro
+      - ./data/orchestrated:/opt/blockpulse/data  # the data root the DAG owns; nothing else under data/ is visible
+      - airflow-state:/opt/airflow/state
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/api/v2/monitor/health', timeout=5)"]
+      interval: 10s
+      timeout: 10s
+      retries: 18
+      start_period: 30s
+    mem_limit: 3g
+    restart: "no"
+
 volumes:
   kafka-data:
   postgres-data:
+  airflow-state:
