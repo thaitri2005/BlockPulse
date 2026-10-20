@@ -1,0 +1,31 @@
+version: 2
+
+sources:
+  - name: lake
+    description: >
+      The partitioned Parquet lake written by `blockpulse process-pending` (docs/guides/05-lake-and-athena.md).
+      Read in place with Hive partitioning; dbt never copies the raw lake.
+    freshness:
+      warn_after: {count: 2, period: hour}
+    tables:
+      - name: transactions
+        description: One screened transaction per session (a txid can appear in more than one session).
+        loaded_at_field: received_at
+        meta:
+          external_location: >-
+            read_parquet('{{ env_var("BLOCKPULSE_LAKE", "../../data/lake") }}/transactions/*/*/*.parquet',
+            hive_partitioning = true, hive_types_autocast = false, union_by_name = true)
+      - name: lifecycle_events
+        description: One lifecycle observation (added, removed, mined, replaced).
+        loaded_at_field: event_time
+        meta:
+          external_location: >-
+            read_parquet('{{ env_var("BLOCKPULSE_LAKE", "../../data/lake") }}/lifecycle_events/*/*/*.parquet',
+            hive_partitioning = true, hive_types_autocast = false, union_by_name = true)
+      - name: capture_sessions
+        description: One capture session, with its coverage (gaps, disconnects).
+        freshness: null  # sessions have no per-row load time
+        meta:
+          external_location: >-
+            read_parquet('{{ env_var("BLOCKPULSE_LAKE", "../../data/lake") }}/capture_sessions/*/*.parquet',
+            hive_partitioning = true, hive_types_autocast = false, union_by_name = true)

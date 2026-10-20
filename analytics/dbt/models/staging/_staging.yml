@@ -1,0 +1,38 @@
+version: 2
+
+models:
+  - name: stg_transactions
+    description: Screened transactions from the lake, one per session.
+    columns:
+      - name: txid
+        tests: [not_null]
+      - name: session
+        tests: [not_null]
+      - name: is_flagged
+        tests: [not_null]
+      - name: ruleset_version
+        tests:
+          - accepted_values:
+              arguments: {values: ['structural-rules-v1']}
+      - name: feature_set_version
+        tests:
+          - accepted_values:
+              arguments: {values: ['transaction-v2']}
+
+  - name: stg_lifecycle_events
+    description: Lifecycle observations from the lake.
+    columns:
+      - name: event_id
+        tests: [unique, not_null]
+      - name: txid
+        tests: [not_null]
+      - name: event_type
+        tests:
+          - accepted_values:
+              arguments: {values: ['added', 'removed', 'mined', 'replaced']}
+
+  - name: stg_capture_sessions
+    description: Capture sessions and their coverage.
+    columns:
+      - name: session
+        tests: [unique, not_null]

@@ -1,0 +1,11 @@
+# Local DuckDB warehouse over the Parquet lake. Paths come from environment variables so tests can point the
+# project at a fixture lake: BLOCKPULSE_LAKE (default ../../data/lake) and BLOCKPULSE_DBT_DB.
+blockpulse:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: "{{ env_var('BLOCKPULSE_DBT_DB', '../../data/dbt/blockpulse.duckdb') }}"
+      threads: 4
+      settings:
+        TimeZone: UTC   # match Athena and the lake-query views

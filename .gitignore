@@ -28,3 +28,8 @@ crash.log
 # Saved Terraform plans
 *.tfplan
 tfplan
+
+# dbt build output
+/analytics/dbt/target/
+/analytics/dbt/logs/
+/analytics/dbt/.user.yml

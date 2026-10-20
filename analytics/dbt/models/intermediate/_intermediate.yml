@@ -1,0 +1,12 @@
+version: 2
+
+models:
+  - name: int_transaction_lifecycle
+    description: Each transaction's latest lifecycle status from all of its evidence, using the Postgres rule.
+    columns:
+      - name: txid
+        tests: [unique, not_null]
+      - name: lifecycle_status
+        tests:
+          - accepted_values:
+              arguments: {values: ['observed_unconfirmed', 'confirmed', 'superseded', 'removed_unknown_reason']}

@@ -1,0 +1,41 @@
+version: 2
+
+models:
+  - name: fct_transactions
+    description: >
+      One row per transaction: first screened observation, structural features, rule flags and lifecycle.
+      A flag is a structural rule match, not evidence of wrongdoing.
+    columns:
+      - name: txid
+        description: Transaction id.
+        tests: [unique, not_null]
+      - name: first_session
+        tests:
+          - not_null
+          - relationships:
+              arguments: {to: ref('dim_capture_sessions'), field: session}
+              config: {severity: warn}  # older hand-run captures have screened rows but no session record
+      - name: lifecycle_status
+        tests:
+          - accepted_values:
+              arguments: {values: ['observed_unconfirmed', 'confirmed', 'superseded', 'removed_unknown_reason']}
+      - name: is_flagged
+        tests: [not_null]
+
+  - name: fct_hourly_activity
+    description: Per UTC hour by receive time; every screened observation counts (matches hourly_flag_rate.sql).
+    tests:
+      - dbt_utils_unique_combination:
+          arguments: {columns: [dt, hour]}
+    columns:
+      - name: transactions
+        tests: [not_null]
+
+  - name: dim_capture_sessions
+    description: One row per capture session with coverage; recorded gaps are a lower bound on what was missed.
+    columns:
+      - name: session
+        tests: [unique, not_null]
+
+  - name: fct_outcomes_by_flag
+    description: Lifecycle outcomes split by whether the rules flagged the transaction. Describes outcomes, not intent.

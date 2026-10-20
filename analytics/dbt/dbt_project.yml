@@ -1,0 +1,21 @@
+name: blockpulse
+version: "1.0.0"
+config-version: 2
+profile: blockpulse
+
+model-paths: ["models"]
+test-paths: ["tests"]
+macro-paths: ["macros"]
+clean-targets: ["target", "logs"]  # override with DBT_TARGET_PATH / DBT_LOG_PATH
+
+models:
+  blockpulse:
+    staging:
+      +materialized: view
+    intermediate:
+      +materialized: table  # tested three times; a view would recompute the window each time
+    marts:
+      +materialized: table
+
+flags:
+  send_anonymous_usage_stats: false

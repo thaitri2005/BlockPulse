@@ -1,0 +1,82 @@
+
+
+============================== 16:00:46.373387 | bcc3075e-3693-483a-a96e-58cec3eb1f1b ==============================
+[0m16:00:46.373387 [info ] [MainThread]: Running with dbt=1.12.6
+[0m16:00:46.388324 [debug] [MainThread]: running dbt with arguments {'version_check': 'True', 'no_print': 'None', 'static_parser': 'True', 'target_path': 'None', 'warn_error_options': 'WarnErrorOptionsV2(error=[], warn=[], silence=[])', 'maximum_seed_size_mib': '1', 'printer_width': '80', 'write_json': 'True', 'empty': 'False', 'log_cache_events': 'False', 'introspect': 'True', 'cache_selected_only': 'False', 'log_format': 'default', 'debug': 'False', 'fail_fast': 'False', 'partial_parse': 'True', 'send_anonymous_usage_stats': 'False', 'quiet': 'False', 'warn_error': 'None', 'profiles_dir': '.', 'invocation_command': 'dbt build --profiles-dir .', 'hints_enabled': 'True', 'indirect_selection': 'eager', 'use_experimental_parser': 'False', 'use_colors': 'True', 'log_path': "D:\\BlockPulse\\analytics\\dbt\\{{ env_var('BLOCKPULSE_DBT_TARGET', '..\\..\\data\\dbt\\target') }}\\logs"}
+[0m16:00:46.957985 [warn ] [MainThread]: [[33mWARNING[0m]: Deprecated functionality
+The `log-path` config in `dbt_project.yml` has been deprecated, and will no
+longer be supported in a future version of dbt-core. If you wish to write dbt
+logs to a custom directory, please use the --log-path CLI flag or DBT_LOG_PATH
+env var instead.
+[0m16:00:46.960038 [warn ] [MainThread]: [[33mWARNING[0m]: Deprecated functionality
+The `target-path` config in `dbt_project.yml` has been deprecated, and will no
+longer be supported in a future version of dbt-core. If you wish to write dbt
+artifacts to a custom directory, please use the --target-path CLI flag or
+DBT_TARGET_PATH env var instead.
+[0m16:00:47.601407 [info ] [MainThread]: Registered adapter: duckdb=1.11.0
+[0m16:00:48.355233 [debug] [MainThread]: checksum: f23684a7f139799f6536212267b46529dadd19ef07056082ed397bc686e79c68, vars: {}, profile: blockpulse, target: local, version: 1.12.6
+[0m16:00:48.358128 [info ] [MainThread]: Unable to do partial parsing because saved manifest not found. Starting full parse.
+[0m16:00:55.174205 [warn ] [MainThread]: [[33mWARNING[0m][MissingArgumentsPropertyInGenericTestDeprecation]: Deprecated
+functionality
+Found top-level arguments to test `dbt_utils_unique_combination` defined on
+'fct_hourly_activity' in package 'blockpulse' (models\marts\_marts.yml).
+Arguments to generic tests should be nested under the `arguments` property.
+[0m16:00:55.682996 [error] [MainThread]: [[31mERROR[0m]: Encountered an error:
+"'dt'"
+[0m16:00:55.691725 [error] [MainThread]: Traceback (most recent call last):
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\cli\requires.py", line 198, in wrapper
+    result, success = func(*args, **kwargs)
+                      ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\cli\requires.py", line 144, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\cli\requires.py", line 295, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\cli\requires.py", line 340, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\cli\requires.py", line 387, in wrapper
+    return func(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\cli\requires.py", line 403, in wrapper
+    setup_manifest(ctx, write=write, write_perf_info=write_perf_info)
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\cli\requires.py", line 478, in setup_manifest
+    ctx.obj["manifest"] = parse_manifest(
+                          ^^^^^^^^^^^^^^^
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\parser\manifest.py", line 2671, in parse_manifest
+    manifest = ManifestLoader.get_full_manifest(
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\parser\manifest.py", line 360, in get_full_manifest
+    manifest = loader.load()
+               ^^^^^^^^^^^^^
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\parser\manifest.py", line 500, in load
+    patcher.construct_sources()
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\parser\sources.py", line 88, in construct_sources
+    parsed = self.parse_source(patched)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\parser\sources.py", line 205, in parse_source
+    parsed_source.relation_name = self._get_relation_name(parsed_source)
+                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\parser\sources.py", line 339, in _get_relation_name
+    return str(relation_cls.create_from(self.root_project, node))
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\adapters\duckdb\relation.py", line 27, in create_from
+    return cls.create_from_source(quoting, relation_config, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\BlockPulse\.venv\Lib\site-packages\dbt\adapters\duckdb\relation.py", line 62, in create_from_source
+    ext_location = ext_location_template.format_map(source_config.as_dict())
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyError: "'dt'"
+
+[0m16:00:55.693727 [warn ] [MainThread]: [[33mWARNING[0m][DeprecationsSummary]: Deprecated functionality
+Summary of encountered deprecations:
+- ConfigLogPathDeprecation: 1 occurrence
+- ConfigTargetPathDeprecation: 1 occurrence
+- MissingArgumentsPropertyInGenericTestDeprecation: 1 occurrence
+To see all deprecation instances instead of just the first occurrence of each,
+run command again with the `--show-all-deprecations` flag. You may also need to
+run with `--no-partial-parse` as some deprecations are only encountered during
+parsing.
+[0m16:00:55.697275 [debug] [MainThread]: Command `dbt build` failed at 16:00:55.696265 after 9.91 seconds
+[0m16:00:55.698395 [debug] [MainThread]: Flushing usage events

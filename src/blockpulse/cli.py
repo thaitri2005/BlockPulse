@@ -171,6 +171,9 @@ def main(argv: list[str] | None = None) -> int:
     lake_query = commands.add_parser("lake-query", help="Run SQL over the local Parquet lake with DuckDB (same SQL as Athena)")
     lake_query.add_argument("query", help="A .sql file, or a named query from analytics/queries (e.g. hourly_flag_rate)")
     lake_query.add_argument("--root", type=Path, default=Path("data"))
+    dbt_parser = commands.add_parser("dbt", help="Run the dbt project on the lake, e.g. `blockpulse dbt build` or `dbt docs generate`")
+    dbt_parser.add_argument("--root", type=Path, default=Path("data"))
+    dbt_parser.add_argument("dbt_args", nargs=argparse.REMAINDER, help="Arguments passed to dbt")
     rebuild = commands.add_parser("serving-rebuild", help="Rebuild the Postgres serving tables from the lake in bulk and swap them in")
     rebuild.add_argument("--root", type=Path, default=Path("data"))
     compact = commands.add_parser("compact-raw", help="Gzip the raw capture of every fully processed session (about 5x smaller)")
@@ -413,6 +416,9 @@ def main(argv: list[str] | None = None) -> int:
             output = None
             summary = run_query(args.root, args.query)
             code = 0
+        elif args.command == "dbt":
+            from blockpulse.warehouse import run_dbt
+            return 0 if run_dbt(args.root, args.dbt_args or ["build"]) else 1
         elif args.command == "serving-rebuild":
             from blockpulse.serving import rebuild_serving
             output = None
