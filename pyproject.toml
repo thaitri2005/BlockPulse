@@ -18,7 +18,8 @@ lake = ["pyarrow==25.0.0"]
 analytics = ["pyarrow==25.0.0", "duckdb==1.5.6", "pytz==2025.2"]  # duckdb needs pytz to return timestamptz values
 m2 = ["psycopg[binary]==3.3.4", "fastapi==0.117.1", "uvicorn==0.37.0"]
 dbt = ["dbt-core==1.12.6", "dbt-duckdb==1.11.0"]
-all = ["blockpulse[dev,m1,m2,ml,analytics,dbt]"]
+metrics = ["prometheus-client==0.26.0"]
+all = ["blockpulse[dev,m1,m2,ml,analytics,dbt,metrics]"]
 
 [project.scripts]
 blockpulse = "blockpulse.cli:main"

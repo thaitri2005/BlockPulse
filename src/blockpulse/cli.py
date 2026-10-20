@@ -85,6 +85,16 @@ def main(argv: list[str] | None = None) -> int:
     kafka_enrich.add_argument("--max-requests", type=int, default=100)
     kafka_enrich.add_argument("--max-messages", type=int)
     kafka_enrich.add_argument("--idle-timeout", type=float, default=3.0)
+    kafka_lake = commands.add_parser("kafka-lake", help="Stream the enriched topic into the lake (features, rules, quality gate)")
+    kafka_lake.add_argument("--lake", type=Path, default=Path("data/lake-stream"),
+                            help="Lake folder to write (keep it separate from the batch lake for the same captures)")
+    kafka_lake.add_argument("--group-id", required=True, help="Stable group ID for restart/resume")
+    kafka_lake.add_argument("--bootstrap-servers", default=DEFAULT_BOOTSTRAP_SERVERS)
+    kafka_lake.add_argument("--batch-messages", type=int, default=500)
+    kafka_lake.add_argument("--batch-seconds", type=float, default=5.0)
+    kafka_lake.add_argument("--idle-timeout", type=float, default=10.0)
+    kafka_lake.add_argument("--max-messages", type=int)
+    kafka_lake.add_argument("--metrics-port", type=int, help="Expose Prometheus metrics on this port")
     kafka_parquet = commands.add_parser("kafka-parquet", help="Archive enriched Kafka messages as restart-safe Parquet files")
     kafka_parquet.add_argument("--output", type=Path, required=True)
     kafka_parquet.add_argument("--group-id", required=True, help="Stable group ID for restart/resume")
@@ -504,6 +514,18 @@ def main(argv: list[str] | None = None) -> int:
                 args.group_id, args.bootstrap_servers, enricher=enricher,
                 max_messages=args.max_messages, idle_timeout=args.idle_timeout,
             ))
+            code = 0
+        elif args.command == "kafka-lake":
+            from blockpulse.stream_lake import stream_to_lake
+            output = args.lake
+            metrics = None
+            if args.metrics_port:
+                from blockpulse.metrics import StreamLakeMetrics
+                metrics = StreamLakeMetrics(args.metrics_port)
+            summary = _kafka_call("Kafka lake sink", lambda: stream_to_lake(
+                args.lake, args.group_id, args.bootstrap_servers, batch_messages=args.batch_messages,
+                batch_seconds=args.batch_seconds, idle_timeout=args.idle_timeout, max_messages=args.max_messages,
+                metrics=metrics))
             code = 0
         elif args.command == "kafka-parquet":
             from blockpulse.parquet_archive import archive_enriched_to_parquet
