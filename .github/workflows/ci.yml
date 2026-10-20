@@ -39,6 +39,9 @@ jobs:
       - name: Lock file matches pyproject.toml
         run: |
           pip install "uv==0.12.10"
+          # Compile on top of the committed lock: uv keeps its pins unless pyproject.toml no longer allows them, so this
+          # fails only when declared dependencies change, not whenever an indirect dependency publishes a release.
+          cp requirements.lock /tmp/expected.lock
           uv pip compile pyproject.toml --extra all --universal --python-version 3.11 --generate-hashes --no-header --annotation-style line -q -o /tmp/expected.lock
           diff -u requirements.lock /tmp/expected.lock
       - name: Install (exactly the locked versions)
