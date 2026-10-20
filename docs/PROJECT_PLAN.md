@@ -26,7 +26,8 @@ What the project will not claim:
 | E3a · AWS collector | Done | 89 h, 0 failures, 2.65 M transactions, about $0.80, torn down ([08](guides/08-aws.md)) |
 | DE3 · Proof artifacts | Done | Hashed lock and isolated venv; CI green; splits from the lake 3.4x faster; batch load test 250x real time; streaming 86 to 152 msg/s and p50 latency 72 s to 0.16 s; three failure drills pass with 0 lost ([09](guides/09-load-test.md), [10](guides/10-failure-drills.md)) |
 | DE3.5 · Serving and storage hardening | Done | Bulk loads 30–52x faster; serving holds all 2.65 M transactions (rebuilt in 10.6 min); raw 10.3 to 2.1 GB; worker survives a broker restart; lint in CI |
-| DE4–DE7 | Staged | See the roadmap |
+| DE4 · dbt on the lake | Done | 8 models, 28 tests, `dbt build` in 1.5 min on 2.65 M transactions; marts reproduce the shared queries exactly and agree with Postgres on every status ([11](guides/11-dbt.md)) |
+| DE5–DE7 | Staged | See the roadmap |
 
 Tests (2026-10-20): 133 passed and 1 optional skip with the Postgres test database; Terraform 9 of 9 with a mocked provider; Amazon Linux 2023 container rehearsals all pass; CI green.
 
@@ -59,9 +60,9 @@ The audit after DE3 found that the serving layer held 16,770 of 2.65 M rows, loa
 
 ### Staged after DE3.5
 
-| Step | Scope | Acceptance | Runs on | Effort |
+| Step | Scope | Acceptance | Runs on | Effort / status |
 | --- | --- | --- | --- | --- |
-| **DE4 · dbt on the lake** | dbt-duckdb over the lake views: staging models per table; marts `fct_transactions`, `fct_hourly_activity`, `dim_capture_sessions`, `fct_lifecycle_outcomes`; schema and data tests (unique, not null, accepted values, relationships, freshness); generated docs and lineage; `dbt build` in CI on a fixture lake. Optional profile for dbt-athena | `dbt build` green locally and in CI; marts reproduce the four shared queries' results; docs site generated | Laptop | 1–2 sessions |
+| **DE4 · dbt on the lake** | dbt-duckdb over the lake: staging, intermediate lifecycle, marts, tests, docs and lineage, `dbt build` in CI | `dbt build` green locally and in CI; marts reproduce the shared queries | Laptop | **Done** 2026-10-20 ([11](guides/11-dbt.md)) |
 | **DE5 · One pipeline: streaming into the lake, with metrics** | A Kafka consumer that writes the enriched topic into the same lake tables (hourly files, same contract and quality gate) instead of one Parquet file per message; Prometheus metrics (consumer lag, throughput, error and quarantine rates, data freshness) scraped by Prometheus in the `m2` profile and charted in Grafana; alert rules for lag and freshness | Lake built from the stream equals the lake built from files for the same sessions (row-level check); dashboards show lag and freshness live during a replay | Laptop for build and short replays | 2–3 sessions |
 | **DE6 · Airflow orchestration** | A DAG per date partition: process, screen, lake, load, dbt build; retries and SLAs; a demonstrated backfill of past dates; runs in the existing Compose stack | A backfill of 3 past days produces the same lake and marts as the direct run; a deliberately failed task retries and recovers | Laptop | 1–2 sessions |
 | **DE7 · Kubernetes** | k3d cluster; a Helm chart for Kafka (Strimzi or Redpanda), Postgres (StatefulSet with a volume), API, Grafana; probes, requests and limits; the drills rerun as pod kills | Chart installs from scratch; pod-kill drills pass with the same invariants as [10](guides/10-failure-drills.md) | Laptop (short); optional k3s-on-EC2 demo on AWS, then destroy | 2–3 sessions |
@@ -80,8 +81,8 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 
 **Next session:**
 
-1. DE4: dbt models, tests and docs on the lake.
-2. DE5: streaming into the lake, with Prometheus metrics.
+1. DE5: streaming into the lake (a Kafka consumer writing the lake tables), with Prometheus metrics for lag, freshness and errors.
+2. DE6: Airflow over the batch tier with a backfill.
 
 ## 4. Decisions
 
@@ -107,6 +108,7 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 | D20 | Manifests declare row order; old manifests keep file order | 2026-10-19: reading from the lake must not silently change recorded results |
 | D21 | The laptop runs only minute-scale jobs; hour-scale runs go to a short-lived AWS instance | 2026-10-20: the laptop sleeps and has 16 GB; E3a showed AWS runs are cheap and reliable |
 | D22 | Postgres is the serving copy and holds all the data. New sessions merge in bulk (`COPY` into staging, set-based merge); backfills rebuild the tables from the lake and swap them in | 2026-10-20: row-by-row loads were 30-52x slower; incremental merges slow down once the random-keyed index outgrows memory; a rebuild loads everything in 10.6 min |
+| D24 | dbt models run on DuckDB over the Parquet lake, through a wrapper that sets absolute paths | 2026-10-20: no extra service; views must use absolute paths because DuckDB resolves them when queried |
 | D23 | Finished raw captures are gzipped in place; all readers accept either form | 2026-10-20: raw was 62% of disk; gzip is 5.4x smaller, stdlib only, byte-identical on read |
 
 ## 5. Risks and limits

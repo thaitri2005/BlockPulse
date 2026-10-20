@@ -23,6 +23,8 @@ What is built, how the pieces connect, and where the code lives. For why, see th
            |---------------' serving-rebuild (bulk, from the lake)
            |
    DuckDB (lake-query) locally, Athena over S3 in AWS
+           |
+   dbt (DuckDB): staging -> int_transaction_lifecycle -> marts (fct_transactions, fct_hourly_activity, ...)
 ```
 
 Unattended runs wrap the same steps: `collect-loop` captures hourly sessions, `process-pending` brings every finished session up to date (process, screen, lake, compact, log, optional Postgres load), `sync-pending` uploads to S3. On AWS these run as systemd services on one instance ([08](guides/08-aws.md)).
@@ -45,6 +47,7 @@ Design rules that hold everywhere:
 | Kafka | `kafka-init`, `capture-kafka`, `kafka-replay`, `kafka-archive`, `kafka-enrich`, `kafka-parquet` | [03](guides/03-kafka.md) |
 | Postgres and API | `db-init`, `load-results`, `load-events`, `serving-rebuild`, `serve` | [04](guides/04-postgres-api-dashboard.md) |
 | Lake and SQL | `lake-query`, `lake-schema` (the lake itself is built by `process-pending`) | [05](guides/05-lake-and-athena.md) |
+| Modelling | `dbt build`, `dbt docs generate`, any dbt command (`blockpulse dbt ...`) | [11](guides/11-dbt.md) |
 | ML evaluation | `build-dataset`, `verify-dataset`, `train-iforest`, `evaluate-iforest`, `sweep`, `detectors ...` | [06](guides/06-ml-evaluation.md) |
 | Unattended collection | `collect`, `collect-loop`, `process-pending`, `sync-pending`, `compact-raw` | [07](guides/07-collection.md), [08](guides/08-aws.md) |
 | Load test and drills | `benchmark batch`, `benchmark streaming`, `drill enrich-crash`, `drill broker-restart`, `drill postgres-crash` | [09](guides/09-load-test.md), [10](guides/10-failure-drills.md) |
@@ -64,6 +67,7 @@ Python package `src/blockpulse/` (about 4,500 lines, flat on purpose):
 | `kafka_pipeline.py`, `kafka_workers.py` | 571 | Topics, publisher, replay, archive consumer, enrichment consumer (batched checkpoints) |
 | `enrichment.py`, `parquet_archive.py` | 370 | Rate-limited REST enrichment; Kafka-to-Parquet archive |
 | `db.py`, `results.py`, `lifecycle.py` + `migrations/` | 303 | Postgres migrations; bulk (`COPY` + set-based merge) duplicate-safe loads; lifecycle status projection |
+| `warehouse.py` | 46 | Runs the dbt project with absolute paths (`dbt`) |
 | `serving.py` | 190 | Rebuild the serving tables from the lake and swap them in atomically (`serving-rebuild`) |
 | `api.py`, `trace.py` | 238 | Read-only FastAPI; one transaction traced back to its raw message |
 | `lake.py`, `analytics.py` | 356 | Lake contracts, quality gate, partitioned writer, Glue schema export; DuckDB views |
@@ -80,6 +84,7 @@ Elsewhere:
 | --- | --- |
 | `tests/` | pytest; Postgres tests opt in with `BLOCKPULSE_TEST_DSN` |
 | `analytics/queries/` | Shared SQL, run by DuckDB locally and saved as Athena named queries |
+| `analytics/dbt/` | dbt project: staging, intermediate and mart models with tests, over the lake |
 | `infra/aws/terraform/` | The AWS collector stack (VPC, instance, S3, IAM, Glue, Athena, budget) and its mocked-provider tests |
 | `infra/aws/instance/` | `install.sh`, `deadline-check.sh` and the hardened systemd units that run on the instance |
 | `infra/aws/tests/` | Amazon Linux 2023 container rehearsals: bootstrap smoke test and real systemd end to end |
@@ -99,6 +104,7 @@ Elsewhere:
 | Raw and replay | JSONL | Inspectable; byte-identical replay |
 | Lake | Parquet + Zstandard, Hive partitions `dt`/`hour` | One file per session per partition |
 | SQL | DuckDB locally, Athena in AWS | Same queries; Glue partition projection; 1 GiB scan cap |
+| Modelling | dbt-core 1.12 with dbt-duckdb | Marts and data tests over the lake |
 | Serving | PostgreSQL 17, FastAPI, Grafana 12 | Read-only API |
 | ML | scikit-learn Isolation Forest | Local append-only registry instead of MLflow |
 | Infrastructure | Terraform (AWS provider 6.x), systemd on Amazon Linux 2023 | No inbound ports, Session Manager, self-expiring |
