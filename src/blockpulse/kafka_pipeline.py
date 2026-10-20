@@ -1,15 +1,15 @@
 """First Kafka-backed M1 path: replay raw captures and archive records locally."""
 
-from datetime import datetime, timezone
 import base64
 import hashlib
 import json
 import os
-from pathlib import Path
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 from blockpulse.events import reject_nonfinite
-from blockpulse.storage import write_summary
+from blockpulse.storage import capture_path, open_capture, write_summary
 
 RAW_TOPIC = "blockpulse.raw.v1"
 ENRICHED_TOPIC = "blockpulse.enriched.v1"
@@ -148,7 +148,7 @@ class RawKafkaPublisher:
 
 def publish_capture(source: Path, bootstrap_servers=DEFAULT_BOOTSTRAP_SERVERS, *, producer_factory=None, topic=RAW_TOPIC):
     """Publish capture envelopes in file order, keyed by session for partition order."""
-    source = source.resolve()
+    source = capture_path(source).resolve()  # messages.jsonl or messages.jsonl.gz
     if not source.is_file():
         raise ValueError(f"Capture file does not exist: {source}")
     if producer_factory is None:
@@ -171,7 +171,7 @@ def publish_capture(source: Path, bootstrap_servers=DEFAULT_BOOTSTRAP_SERVERS, *
         if error is not None:
             errors.append(str(error))
 
-    with source.open("rb") as rows:
+    with open_capture(source) as rows:
         for line_number, raw in enumerate(rows, start=1):
             if not raw.strip():
                 continue

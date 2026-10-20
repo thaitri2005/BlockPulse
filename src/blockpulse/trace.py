@@ -5,6 +5,7 @@ from pathlib import Path
 
 from blockpulse.events import parse_record, reject_nonfinite
 from blockpulse.features import FEATURE_NAMES, extract_features
+from blockpulse.storage import capture_path, open_capture
 
 
 def find_archived_features(capture: Path, message_ids: set[str], txid: str) -> dict:
@@ -13,8 +14,9 @@ def find_archived_features(capture: Path, message_ids: set[str], txid: str) -> d
     Scans the capture file once. Returns where the evidence was found and the recomputed features;
     nothing is fetched from the network.
     """
+    capture = capture_path(capture)
     found = {"capture_file": str(capture.resolve()), "messages": {}, "recomputed_features": None, "problem": None}
-    with capture.open("rb") as lines:
+    with open_capture(capture) as lines:
         for line_number, raw in enumerate(lines, start=1):
             try:
                 record = json.loads(raw, parse_constant=reject_nonfinite)

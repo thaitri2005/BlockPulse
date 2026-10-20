@@ -97,7 +97,7 @@ def test_process_pending_is_idempotent_compacts_logs_and_ignores_other_folders(t
     rows = layout.log.read_text(encoding="utf-8").splitlines()
     assert len(rows) == 3 and rows[0].startswith('"session"')
 
-    assert collector.process_pending(layout) == {"sessions": [], "failed": []}
+    assert collector.process_pending(layout) == {"sessions": [], "failed": [], "backfill_status_changes": None}
     assert len(layout.log.read_text(encoding="utf-8").splitlines()) == 3
 
 

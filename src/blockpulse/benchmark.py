@@ -19,7 +19,7 @@ import threading
 import time
 from pathlib import Path
 
-from blockpulse.storage import utc_now
+from blockpulse.storage import capture_path, utc_now
 
 
 def _peak_memory_bytes():
@@ -68,11 +68,12 @@ def benchmark_batch(raw_sessions: list[Path], work: Path) -> dict:
     per_session = []
     for raw in raw_sessions:
         name = raw.name
-        _link_or_copy(raw / "messages.jsonl", work / "raw" / name / "messages.jsonl")
+        capture = capture_path(raw)
+        _link_or_copy(capture, work / "raw" / name / capture.name)
         shutil.copyfile(raw / "summary.json", work / "raw" / name / "summary.json")
         timings = {}
         started = time.perf_counter()
-        processed = process_capture(work / "raw" / name / "messages.jsonl", work / "processed" / name)
+        processed = process_capture(work / "raw" / name, work / "processed" / name)
         timings["process"] = time.perf_counter() - started
         started = time.perf_counter()
         detect_features(work / "processed" / name / "features.jsonl", work / "screened" / name)
@@ -83,7 +84,7 @@ def benchmark_batch(raw_sessions: list[Path], work: Path) -> dict:
         for stage, seconds in timings.items():
             stages[stage] += seconds
         totals["sessions"] += 1
-        totals["raw_bytes"] += (raw / "messages.jsonl").stat().st_size
+        totals["raw_bytes"] += capture_path(raw).stat().st_size  # on-disk bytes (gzipped once compacted)
         totals["messages"] += processed["lines_read"]
         totals["events"] += sum(processed["event_counts"].values())
         totals["transactions"] += processed["features_written"]
@@ -169,7 +170,7 @@ def benchmark_streaming(raw_sessions: list[Path], bootstrap: str) -> dict:
     worker.start()
     published = 0
     for raw in raw_sessions:
-        published += publish_capture(raw / "messages.jsonl", bootstrap)["messages_published"]
+        published += publish_capture(raw, bootstrap)["messages_published"]
     publish_seconds = time.monotonic() - started
     worker.join()
     total_seconds = time.monotonic() - started
@@ -181,7 +182,7 @@ def benchmark_streaming(raw_sessions: list[Path], bootstrap: str) -> dict:
         "schema_version": 1, "kind": "streaming", "created_at": utc_now(), "environment": _environment(),
         "input": {"sessions": len(raw_sessions), "first_session": raw_sessions[0].name,
                   "last_session": raw_sessions[-1].name, "messages_published": published,
-                  "raw_bytes": sum((r / "messages.jsonl").stat().st_size for r in raw_sessions)},
+                  "raw_bytes": sum(capture_path(r).stat().st_size for r in raw_sessions)},
         "seconds": {"publish": round(publish_seconds, 2), "until_enrichment_idle": round(total_seconds, 2)},
         "throughput": {
             "publish_messages_per_second": round(published / publish_seconds, 1),

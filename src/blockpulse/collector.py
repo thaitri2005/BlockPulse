@@ -12,22 +12,23 @@ are moved aside (never deleted) and redone, and ``sync_pending`` uploads each se
 
 import asyncio
 import csv
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import gzip
 import json
 import os
-from pathlib import Path
 import shlex
 import shutil
 import subprocess
 import time
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
 
 from websockets.asyncio.client import connect
 
 from blockpulse.capture import CaptureConfig, capture
 from blockpulse.detect import detect_features
 from blockpulse.process import process_capture
+from blockpulse.storage import compress_capture
 
 SESSION_PREFIX = "session-"
 LOG_FIELDS = ("session", "seconds", "messages", "features", "flagged", "connection_errors", "stop_reason")
@@ -186,7 +187,7 @@ def append_log(layout: Layout, name: str) -> dict:
 
 
 def process_session(layout: Layout, name: str, *, load_db: bool = False, dsn: str | None = None, compact: bool = True,
-                    lake: bool = True) -> dict:
+                    project: bool = True, lake: bool = True) -> dict:
     """Bring one finished capture up to date. Each stage runs only if its output is missing."""
     raw = layout.raw / name
     if not _complete(raw):
@@ -196,7 +197,7 @@ def process_session(layout: Layout, name: str, *, load_db: bool = False, dsn: st
     if not _complete(processed):
         _set_aside(processed)
         processed.parent.mkdir(parents=True, exist_ok=True)
-        process_capture(raw / "messages.jsonl", processed)
+        process_capture(raw, processed)  # messages.jsonl or messages.jsonl.gz
         done["processed"] = True
     if not _complete(screened):
         _set_aside(screened)
@@ -216,13 +217,16 @@ def process_session(layout: Layout, name: str, *, load_db: bool = False, dsn: st
         from blockpulse.results import load_screened
         with db.connect(dsn) as connection:
             results = load_screened(connection, screened, name)
-            events = load_events(connection, processed)
+            events = load_events(connection, processed, project=project)
         if results["conflicts"] or results["invalid"] or events["invalid"]:
             raise CollectorError(f"{name}: load reported conflicts or invalid rows; not marking it loaded")
         (screened / LOADED_MARKER).write_text(utc_now().isoformat() + "\n", encoding="utf-8")
         done["loaded"] = True
     if compact:
         done["compacted"] = _compact_events(processed)
+        # Every stage for this session is done, so the raw capture can be gzipped (about 5x smaller; replay and
+        # reprocessing read it transparently). It stays the source of truth.
+        done["raw_bytes_saved"] = compress_capture(raw)
     return done
 
 
@@ -254,12 +258,22 @@ def process_pending(layout: Layout, *, load_db: bool = False, dsn: str | None = 
     """Process every pending session. One failure is recorded and does not stop the others."""
     results, failed = [], []
     with _Lock(layout.root):
-        for name in pending_sessions(layout, load_db=load_db, lake=lake):
+        pending = pending_sessions(layout, load_db=load_db, lake=lake)
+        # Several sessions to load is a backfill: load them all, then project lifecycle status once, instead of
+        # rescanning the growing events table after every session.
+        backfill = load_db and len(pending) > 1
+        for name in pending:
             try:
-                results.append(process_session(layout, name, load_db=load_db, dsn=dsn, lake=lake))
+                results.append(process_session(layout, name, load_db=load_db, dsn=dsn, lake=lake, project=not backfill))
             except Exception as error:  # keep going; the failure is reported and retried next time
                 failed.append({"session": name, "error": f"{type(error).__name__}: {error}"})
-    return {"sessions": results, "failed": failed}
+        status_changes = None
+        if backfill and any(r.get("loaded") for r in results):
+            from blockpulse import db
+            from blockpulse.lifecycle import project_all
+            with db.connect(dsn) as connection:
+                status_changes = project_all(connection)
+    return {"sessions": results, "failed": failed, "backfill_status_changes": status_changes}
 
 
 def collect(layout: Layout, *, duration: float, url: str, prefix: str = "session", load_db: bool = False,

@@ -1,9 +1,9 @@
 """Small local stores: append JSONL; write summaries atomically."""
 
-from datetime import datetime, timezone
 import json
-from pathlib import Path
 import uuid
+from datetime import datetime, timezone
+from pathlib import Path
 
 
 def utc_now() -> str:
@@ -54,3 +54,62 @@ def write_summary(path: Path, value: dict):
     temporary = path.with_suffix(".tmp")
     temporary.write_text(json.dumps(value, indent=2, allow_nan=False) + "\n", encoding="utf-8")
     temporary.replace(path)
+
+
+CAPTURE_NAME = "messages.jsonl"
+
+
+def capture_path(path: Path) -> Path:
+    """The raw capture file for a session folder or a messages.jsonl path, compressed or not.
+
+    Finished captures are gzipped to messages.jsonl.gz; every reader goes through here, so either form works.
+    """
+    path = Path(path)
+    if path.is_dir():
+        path = path / CAPTURE_NAME
+    if path.is_file():
+        return path
+    packed = path.with_name(path.name + ".gz")
+    if path.suffix != ".gz" and packed.is_file():
+        return packed
+    raise FileNotFoundError(f"No capture at {path} (or {packed.name})")
+
+
+def open_capture(path: Path):
+    """Open a raw capture for binary reading. gzip returns the original bytes, so checksums don't change."""
+    import gzip
+    path = capture_path(path)
+    return gzip.open(path, "rb") if path.suffix == ".gz" else path.open("rb")
+
+
+def compress_capture(folder: Path) -> int:
+    """Gzip a finished session's messages.jsonl in place; returns bytes saved (0 if already compressed).
+
+    The compressed file is written next to the original, read back in full and compared by SHA-256 before the
+    original is removed, so an interruption at any point leaves a complete copy.
+    """
+    import gzip
+    import hashlib
+    import shutil
+    plain = Path(folder) / CAPTURE_NAME
+    packed = plain.with_name(plain.name + ".gz")
+    if not plain.is_file():
+        return 0
+    temporary = packed.with_name(packed.name + ".tmp")
+    with plain.open("rb") as source, gzip.open(temporary, "wb", compresslevel=6) as target:
+        shutil.copyfileobj(source, target, 1 << 20)
+
+    def digest(opener, path):
+        h = hashlib.sha256()
+        with opener(path, "rb") as handle:
+            for chunk in iter(lambda: handle.read(1 << 20), b""):
+                h.update(chunk)
+        return h.hexdigest()
+
+    if digest(gzip.open, temporary) != digest(open, plain):
+        temporary.unlink()
+        raise StorageError(f"Compressed copy of {plain} did not read back identically; original kept")
+    saved = plain.stat().st_size - temporary.stat().st_size
+    temporary.replace(packed)
+    plain.unlink()
+    return saved

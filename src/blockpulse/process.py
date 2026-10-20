@@ -1,14 +1,14 @@
 """Offline normalization and feature extraction; this module performs no HTTP."""
 
-from collections import Counter
 import csv
 import hashlib
 import json
+from collections import Counter
 from pathlib import Path
 
 from blockpulse.events import EVENT_TYPES, parse_record, reject_nonfinite, stable_id
 from blockpulse.features import FEATURE_NAMES, FEATURE_SET_VERSION, extract_features
-from blockpulse.storage import JsonlWriter, write_summary
+from blockpulse.storage import JsonlWriter, capture_path, open_capture, write_summary
 
 
 def process_capture(source: Path, output: Path) -> dict:
@@ -17,9 +17,10 @@ def process_capture(source: Path, output: Path) -> dict:
     Invalid/ID-only records are reported and do not prevent later full records
     from producing features. Conflicting feature inputs are reported explicitly.
     """
-    source = source.resolve()
-    if not source.is_file():
-        raise ValueError(f"Capture file does not exist: {source}")
+    try:
+        source = capture_path(source).resolve()  # messages.jsonl or messages.jsonl.gz
+    except FileNotFoundError as error:
+        raise ValueError(f"Capture file does not exist: {source}") from error
     output.mkdir(parents=True, exist_ok=False)
     summary = {
         "schema_version": 1,
@@ -44,7 +45,7 @@ def process_capture(source: Path, output: Path) -> dict:
     required = ("vin", "vout", "weight", "fee")
     csv_fields = ("txid", "event_id", "received_at", "source_mode", "feature_set_version", *FEATURE_NAMES)
     with (
-        source.open("rb") as captured,
+        open_capture(source) as captured,
         JsonlWriter(output / "events.jsonl") as events_file,
         JsonlWriter(output / "features.jsonl") as features_file,
         JsonlWriter(output / "errors.jsonl") as errors_file,
