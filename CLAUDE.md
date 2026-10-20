@@ -19,10 +19,10 @@ The project owner is building this to learn data engineering. Optimize for their
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/guides/04-postgres-api-dashboard.md): 142 passed, 1 skipped
+.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/guides/04-postgres-api-dashboard.md): 147 passed, 1 skipped; without it: 131 passed, 17 skipped
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
-docker compose --profile m2 up -d --wait          # Postgres + Grafana (~900 MB); `stop` when done
+docker compose --profile m2 up -d --wait          # Postgres + Grafana + Prometheus (~1.1 GB); `stop` when done
 ```
 
 Rebuild the whole M3 chain and compare with the recorded artifacts: `powershell -File scripts/reproduce_m3.ps1 [-Manifest data/datasets/dataset-<id>.json]` (`blockpulse verify-dataset <manifest>` checks a manifest alone). Model splits read from the Parquet lake when it matches the manifest; manifests built before 2026-10-19 keep file order and read JSONL only, so old results reproduce exactly. The champion detector is in `data/detectors/registry.jsonl` (`blockpulse detectors status`); the rules are champion until a model clears the gate.

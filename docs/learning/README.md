@@ -35,6 +35,8 @@ Each exercise is sized for one sitting of about 30-60 minutes. Stop when a conce
 | 19 | Lake layout and data contracts | Parquet vs JSONL, Hive partitions and pruning, small files, quarantine vs silent fixes, idempotent rebuilds | `lake.py` → `validate()`, `build_session()`; [lake guide](../guides/05-lake-and-athena.md) | To write together |
 | 20 | One SQL, two engines | DuckDB over local files, Athena over S3, partition projection, scan cost | `analytics.py`, `analytics/queries/`, `infra/aws/terraform/analytics.tf` | To write together |
 | 21 | Modelling with dbt | Sources, staging, intermediate and marts; `ref` and lineage; schema and data tests; why one rule should live in one place | `analytics/dbt/`; [dbt guide](../guides/11-dbt.md) | To write together |
+| 22 | Exactly-once output from an at-least-once stream | Micro-batches, offset-named files, commit after write, why replay must delete by offset range | `stream_lake.py` → `stream_to_lake()`, `_remove_replayed()`; `tests/test_stream_lake.py` | To write together |
+| 23 | Metrics and alerts | Counters vs gauges vs histograms, label cardinality, `rate()`, pending vs firing | `metrics.py`; `observability/prometheus/alerts.yml`; [streaming guide](../guides/12-streaming-lake-and-metrics.md) | To write together |
 
 ## Exercise outlines
 

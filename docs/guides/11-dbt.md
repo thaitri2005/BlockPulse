@@ -54,7 +54,7 @@ Flagged transactions (large fan-ins, fan-outs and equal-output shapes) were conf
 
 ## Freshness
 
-`dbt source freshness` checks the newest `received_at` and `event_time` in the lake and warns after 2 hours. On recorded data it warns, as it should: the last session ended on 2026-10-19. It becomes meaningful with live collection, and DE5 adds the same signal as a Prometheus metric.
+`dbt source freshness` checks the newest `received_at` and `event_time` in the lake and warns after 2 hours. On recorded data it warns, as it should: the last session ended on 2026-10-19. It becomes meaningful with live collection, and DE5 adds the same signal as a Prometheus metric ([12](12-streaming-lake-and-metrics.md)).
 
 ## Limits
 

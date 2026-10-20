@@ -18,7 +18,7 @@ Every runner calls the same tested commands in [`src/blockpulse/collector.py`](.
 | **AWS instance** ([08](08-aws.md)) | Round-the-clock collection for days, laptop off | **Ran** 2026-10-15 to 19: 89 hourly sessions, 0 failures, about $0.80 |
 | **Windows Task Scheduler** (`scripts/install_collector.ps1`) | Collecting on the laptop with no cloud account | Ready; the collector is unit-tested, the scheduled task itself has not been installed |
 
-An Airflow runner was written and removed on 2026-10-20 without ever running (its image wouldn't download here). Airflow returns in roadmap step DE5 as a batch DAG with backfills.
+An Airflow runner was written and removed on 2026-10-20 without ever running (its image wouldn't download here). Airflow returns in roadmap step DE6 as a batch DAG with backfills.
 
 ## Laptop (Windows Task Scheduler)
 

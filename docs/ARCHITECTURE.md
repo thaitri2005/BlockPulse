@@ -13,6 +13,9 @@ What is built, how the pieces connect, and where the code lives. For why, see th
                       |                          \
         process (events, features)          capture-kafka -> Kafka raw topic -> enrich -> enriched topic
                       |                                          -> JSONL archive / Parquet archive
+                      |                                          -> kafka-lake: features, rules, quality gate
+                      |                                             -> data/lake-stream (same tables)
+                      |                                             -> /metrics -> Prometheus -> Grafana
         detect (structural rules)
                       |
      data/processed/<session>/, data/screened/<session>/
@@ -44,7 +47,7 @@ Design rules that hold everywhere:
 | Group | Commands | Guide |
 | --- | --- | --- |
 | Capture and process | `capture`, `process`, `detect`, `lab`, `trace` | [01](guides/01-capture-and-process.md), [02](guides/02-structural-rules.md) |
-| Kafka | `kafka-init`, `capture-kafka`, `kafka-replay`, `kafka-archive`, `kafka-enrich`, `kafka-parquet` | [03](guides/03-kafka.md) |
+| Kafka | `kafka-init`, `capture-kafka`, `kafka-replay`, `kafka-archive`, `kafka-enrich`, `kafka-parquet`, `kafka-lake` | [03](guides/03-kafka.md), [12](guides/12-streaming-lake-and-metrics.md) |
 | Postgres and API | `db-init`, `load-results`, `load-events`, `serving-rebuild`, `serve` | [04](guides/04-postgres-api-dashboard.md) |
 | Lake and SQL | `lake-query`, `lake-schema` (the lake itself is built by `process-pending`) | [05](guides/05-lake-and-athena.md) |
 | Modelling | `dbt build`, `dbt docs generate`, any dbt command (`blockpulse dbt ...`) | [11](guides/11-dbt.md) |
@@ -65,6 +68,8 @@ Python package `src/blockpulse/` (about 4,500 lines, flat on purpose):
 | `detector.py`, `detect.py`, `lab.py` | 330 | The three structural rules, offline screening, synthetic rule cases |
 | `storage.py` | 56 | Never-overwrite run folders, atomic summaries |
 | `kafka_pipeline.py`, `kafka_workers.py` | 571 | Topics, publisher, replay, archive consumer, enrichment consumer (batched checkpoints) |
+| `stream_lake.py` | 216 | Enriched topic to lake tables in offset-named micro-batches, through the quality gate (`kafka-lake`) |
+| `metrics.py` | 71 | Prometheus metrics for the stream sink: lag, freshness, throughput, quarantines |
 | `enrichment.py`, `parquet_archive.py` | 370 | Rate-limited REST enrichment; Kafka-to-Parquet archive |
 | `db.py`, `results.py`, `lifecycle.py` + `migrations/` | 303 | Postgres migrations; bulk (`COPY` + set-based merge) duplicate-safe loads; lifecycle status projection |
 | `warehouse.py` | 46 | Runs the dbt project with absolute paths (`dbt`) |
@@ -76,7 +81,7 @@ Python package `src/blockpulse/` (about 4,500 lines, flat on purpose):
 | `collector.py` | 314 | Capture loop, idempotent session processing, lock, S3 upload |
 | `benchmark.py` | 198 | Batch and streaming load tests on recorded sessions (`benchmark`) |
 | `drills.py` | 191 | Failure drills: worker crash, broker restart, Postgres crash (`drill`) |
-| `cli.py` | 453 | Command-line entry point |
+| `cli.py` | 560 | Command-line entry point |
 
 Elsewhere:
 
@@ -89,8 +94,9 @@ Elsewhere:
 | `infra/aws/instance/` | `install.sh`, `deadline-check.sh` and the hardened systemd units that run on the instance |
 | `infra/aws/tests/` | Amazon Linux 2023 container rehearsals: bootstrap smoke test and real systemd end to end |
 | `infra/aws/build_bundle.py` | Reproducible app zip for the instance |
-| `observability/grafana/` | Provisioned datasource and dashboard |
-| `compose.yaml` | Profiles `m1` (Kafka) and `m2` (Postgres, Grafana) |
+| `observability/grafana/` | Provisioned datasources (Postgres, Prometheus) and dashboards (data, pipeline health) |
+| `observability/prometheus/` | Scrape config and alert rules |
+| `compose.yaml` | Profiles `m1` (Kafka) and `m2` (Postgres, Grafana, Prometheus) |
 | `scripts/` | Laptop collection task, M2 demo, M3 reproduction |
 | `examples/` | Learning exercise 1 and synthetic fixtures |
 | `.github/workflows/ci.yml` | CI: pytest with Postgres, Terraform checks, container rehearsals |
@@ -106,6 +112,7 @@ Elsewhere:
 | SQL | DuckDB locally, Athena in AWS | Same queries; Glue partition projection; 1 GiB scan cap |
 | Modelling | dbt-core 1.12 with dbt-duckdb | Marts and data tests over the lake |
 | Serving | PostgreSQL 17, FastAPI, Grafana 12 | Read-only API |
+| Metrics | Prometheus 3.5, prometheus-client | Scrapes the stream sink every 5 s; alert rules for lag, freshness, quarantine, sink down |
 | ML | scikit-learn Isolation Forest | Local append-only registry instead of MLflow |
 | Infrastructure | Terraform (AWS provider 6.x), systemd on Amazon Linux 2023 | No inbound ports, Session Manager, self-expiring |
 
@@ -113,6 +120,7 @@ Elsewhere:
 
 - One Kafka broker and one instance: nothing is highly available.
 - Scoring is offline (files in, files out); no streaming feature or score worker.
-- The Kafka path and the Postgres path connect through files, not topics.
+- The Kafka path and the Postgres path connect through files, not topics. The stream sink writes a separate lake (`data/lake-stream`), and nothing loads it into Postgres yet.
+- The stream sink makes small files (one per partition per 5-second batch); hourly compaction isn't built.
 - Postgres is a serving copy on one 512 MB container. Incremental loads slow down as the random-keyed `lifecycle_events` index outgrows memory, so large backfills use `serving-rebuild` ([04](guides/04-postgres-api-dashboard.md#two-ways-data-gets-in)).
 - The Kafka-to-Parquet archive writes one file per message (built for restart clarity); the lake is the right-sized store.
