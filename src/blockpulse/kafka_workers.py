@@ -21,6 +21,17 @@ def _log(event, **fields):
     print(json.dumps(row, separators=(",", ":"), allow_nan=False), file=sys.stderr, flush=True)
 
 
+GROUP_CHANGE_ERRORS = {"UNKNOWN_MEMBER_ID", "ILLEGAL_GENERATION", "REBALANCE_IN_PROGRESS", "NOT_COORDINATOR",
+                       "COORDINATOR_NOT_AVAILABLE", "COORDINATOR_LOAD_IN_PROGRESS", "FENCED_INSTANCE_ID"}
+
+
+def _is_group_change(error) -> bool:
+    """True for commit failures caused by group membership changing, which a rejoin fixes."""
+    detail = error.args[0] if getattr(error, "args", None) else None
+    name = detail.name() if hasattr(detail, "name") else ""
+    return name in GROUP_CHANGE_ERRORS
+
+
 def _consumer_lag(consumer):
     try:
         positions = consumer.position(consumer.assignment())
@@ -86,6 +97,7 @@ def enrich_topic(
     pending = {}  # partition -> last processed message, not yet committed
     last_checkpoint = time.monotonic()
     since_checkpoint = 0
+    commits_skipped = 0
 
     def delivered(error, _message):
         if error is not None:
@@ -105,8 +117,18 @@ def enrich_topic(
         remaining = producer.flush(30)
         if remaining or delivery_errors:
             raise RuntimeError(f"Kafka publish failed before commit: {remaining} pending; {delivery_errors[:3]}")
-        for message in pending.values():
-            consumer.commit(message=message, asynchronous=False)
+        nonlocal commits_skipped
+        try:
+            for message in pending.values():
+                consumer.commit(message=message, asynchronous=False)
+        except Exception as error:
+            if not _is_group_change(error):
+                raise
+            # The group changed under us (for example the broker restarted and forgot it). The output is already
+            # safely written; the offsets just aren't recorded, so these messages will be redelivered after the
+            # consumer rejoins on its next poll, and idempotent sinks absorb them. Keep running.
+            commits_skipped += 1
+            _log("kafka_commit_skipped_group_changed", detail=str(error)[:200])
         pending.clear()
         last_checkpoint, since_checkpoint = time.monotonic(), 0
     _log("kafka_enrichment_started", group_id=group_id, topic=RAW_TOPIC, output_topic=ENRICHED_TOPIC)
@@ -177,7 +199,7 @@ def enrich_topic(
         "messages_consumed": messages, "events_emitted": events,
         "transactions_enriched": enriched_count, "enrichment_requests": requests,
         "error_records": failures, "last_offsets_by_partition": offsets,
-        "consumer_lag_messages": final_lag,
+        "consumer_lag_messages": final_lag, "commits_skipped_group_changed": commits_skipped,
         "elapsed_seconds": round(elapsed, 3), "messages_per_second": round(messages / elapsed, 3),
         "enrichment_requests_per_second": round(requests / elapsed, 3),
         "coverage_note": "Only added transactions missing required fields are fetched; request budget and provider view bound coverage.",

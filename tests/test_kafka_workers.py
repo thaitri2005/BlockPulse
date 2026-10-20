@@ -29,13 +29,16 @@ class Consumer:
 
 class Producer:
     instances = []
-    def __init__(self, config): self.config, self.records, self.sent, self.flushes = config, [], [], 0; Producer.instances.append(self)
+    def __init__(self, config):
+        self.config, self.records, self.sent, self.flushes = config, [], [], 0
+        Producer.instances.append(self)
     def produce(self, topic, *, key, value, on_delivery): self.records.append((topic, key, value, on_delivery))
     def flush(self, timeout):
         self.flushes += 1
         pending, self.records = self.records, []
         self.sent.extend(pending)
-        for _, _, _, callback in pending: callback(None, None)
+        for _, _, _, callback in pending:
+            callback(None, None)
         return 0
     def poll(self, timeout): pass
 
@@ -54,10 +57,14 @@ def test_worker_publishes_enriched_then_error_before_committing():
     record = Message(json.dumps(raw).encode())
     instances = []
     def consumer_factory(config):
-        value = Consumer(config, [record]); instances.append(value); return value
+        value = Consumer(config, [record])
+        instances.append(value)
+        return value
     producer = []
     def producer_factory(config):
-        value = Producer(config); producer.append(value); return value
+        value = Producer(config)
+        producer.append(value)
+        return value
     result = enrich_topic(
         "test-enricher", consumer_factory=consumer_factory, producer_factory=producer_factory,
         enricher=RateLimitedEnricher(max_requests=1, fetch=lambda _txid: (_ for _ in ()).throw(RuntimeError("offline"))),
@@ -99,9 +106,12 @@ def complete_message(n):
 
 class OrderedProducer(Producer):
     """Records the order of flushes and commits so the test can check output is acknowledged first."""
-    def __init__(self, config, log): super().__init__(config); self.log = log
+    def __init__(self, config, log):
+        super().__init__(config)
+        self.log = log
     def flush(self, timeout):
-        self.log.append(("flush", len(self.records))); return super().flush(timeout)
+        self.log.append(("flush", len(self.records)))
+        return super().flush(timeout)
 
 
 def test_worker_commits_in_batches_only_after_a_flush():
@@ -124,7 +134,8 @@ def test_worker_does_not_commit_when_a_delivery_fails():
     class FailingProducer(Producer):
         def flush(self, timeout):
             pending, self.records = self.records, []
-            for _, _, _, callback in pending: callback("broker unavailable", None)
+            for _, _, _, callback in pending:
+                callback("broker unavailable", None)
             return 0
     consumer = Consumer({}, [complete_message(n) for n in range(3)])
     try:
@@ -135,3 +146,41 @@ def test_worker_does_not_commit_when_a_delivery_fails():
     else:
         raise AssertionError("a failed delivery must stop the worker")
     assert consumer.commits == []  # nothing committed: the messages will be processed again (at-least-once)
+
+
+class FakeKafkaError:
+    def __init__(self, name): self._name = name
+    def name(self): return self._name
+
+
+class FakeKafkaException(Exception):
+    pass
+
+
+def test_worker_keeps_running_when_the_group_changes_under_it():
+    consumer = Consumer({}, [complete_message(n) for n in range(4)])
+    attempts = []
+
+    def commit(*, message, asynchronous):
+        attempts.append(message.offset())
+        if len(attempts) == 1:  # the broker restarted and forgot the group
+            raise FakeKafkaException(FakeKafkaError("UNKNOWN_MEMBER_ID"))
+        consumer.commits.append(message.offset())
+    consumer.commit = commit
+    result = enrich_topic("rejoin", consumer_factory=lambda _c: consumer, producer_factory=lambda _c: Producer({}),
+                          enricher=RateLimitedEnricher(fetch=lambda _t: None), max_messages=4, commit_every=2)
+    assert result["messages_consumed"] == 4 and result["commits_skipped_group_changed"] == 1
+    assert consumer.commits == [3]  # the first batch's commit was skipped, the second succeeded
+
+
+def test_other_commit_errors_still_stop_the_worker():
+    consumer = Consumer({}, [complete_message(n) for n in range(2)])
+    def commit(*, message, asynchronous): raise FakeKafkaException(FakeKafkaError("TOPIC_AUTHORIZATION_FAILED"))
+    consumer.commit = commit
+    try:
+        enrich_topic("auth", consumer_factory=lambda _c: consumer, producer_factory=lambda _c: Producer({}),
+                     enricher=RateLimitedEnricher(fetch=lambda _t: None), max_messages=2)
+    except FakeKafkaException:
+        pass
+    else:
+        raise AssertionError("an authorization failure must not be swallowed")

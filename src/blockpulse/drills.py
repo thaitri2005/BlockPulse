@@ -74,7 +74,7 @@ def _kafka_invariants(checks: list, bootstrap: str, published: int, archive: Pat
 def _publish(sessions: list[Path], bootstrap: str) -> int:
     from blockpulse.kafka_pipeline import create_m1_topics, publish_capture
     create_m1_topics(bootstrap)
-    return sum(publish_capture(s / "messages.jsonl", bootstrap)["messages_published"] for s in sessions)
+    return sum(publish_capture(s, bootstrap)["messages_published"] for s in sessions)
 
 
 def _enricher(group: str, bootstrap: str) -> subprocess.Popen:
@@ -115,6 +115,9 @@ def drill_broker_restart(sessions: list[Path], bootstrap: str, work: Path, *, re
            {"restart_after_seconds": restart_after})
     out, err = worker.communicate()
     first_ok = worker.returncode == 0
+    _check(checks, "worker survived the broker restart (rejoined its group and finished)", first_ok,
+           {"exit_code": worker.returncode, "error_tail": "" if first_ok else err[-300:],
+            "commits_skipped": json.loads(out).get("commits_skipped_group_changed") if first_ok else None})
     # Whether the worker rode out the restart or stopped with an error, a rerun with the same group must finish.
     resumed = _enricher(group, bootstrap)
     out2, err2 = resumed.communicate()
