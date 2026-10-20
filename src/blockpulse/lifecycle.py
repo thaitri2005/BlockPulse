@@ -18,39 +18,60 @@ STATUS_BY_EVENT = {
     "replaced": "superseded",
 }
 
-INSERT_EVENT = """
-INSERT INTO lifecycle_events (event_id, run_id, txid, event_type, event_time, source_message_id,
-                              source_sequence, replacement_txid)
-VALUES (%(event_id)s, %(run_id)s, %(txid)s, %(event_type)s, %(event_time)s, %(source_message_id)s,
-        %(source_sequence)s, %(replacement_txid)s)
-ON CONFLICT (event_id) DO NOTHING
-RETURNING event_id
+STAGE_COLUMNS = ("event_id", "run_id", "txid", "event_type", "event_time", "source_message_id",
+                 "source_sequence", "replacement_txid")
+
+CREATE_STAGE = """
+CREATE TEMP TABLE stage_events (
+    event_id text, run_id text, txid text, event_type text, event_time timestamptz,
+    source_message_id text, source_sequence bigint, replacement_txid text
+) ON COMMIT DROP
 """
 
 UPSERT_SEEN = """
-INSERT INTO transactions (txid, first_seen_at, last_seen_at) VALUES (%(txid)s, %(event_time)s, %(event_time)s)
+INSERT INTO transactions (txid, first_seen_at, last_seen_at)
+SELECT txid, min(event_time), max(event_time) FROM stage_events GROUP BY txid
 ON CONFLICT (txid) DO UPDATE SET
     first_seen_at = LEAST(transactions.first_seen_at, EXCLUDED.first_seen_at),
     last_seen_at  = GREATEST(transactions.last_seen_at, EXCLUDED.last_seen_at)
 """
 
-# Rebuild the status of the given transactions from all of their stored evidence.
-PROJECT = """
+INSERT_EVENTS = """
+INSERT INTO lifecycle_events (event_id, run_id, txid, event_type, event_time, source_message_id,
+                              source_sequence, replacement_txid)
+SELECT event_id, run_id, txid, event_type, event_time, source_message_id, source_sequence, replacement_txid
+FROM stage_events
+ON CONFLICT (event_id) DO NOTHING
+"""
+
+# Rebuild the status of transactions from all of their stored evidence: those this load touched, or (for a
+# backfill) every transaction at once with a single scan.
+_PROJECT_BODY = """
 UPDATE transactions t SET lifecycle_status = latest.status
 FROM (
-    SELECT DISTINCT ON (txid) txid,
-        CASE event_type WHEN 'added' THEN 'observed_unconfirmed' WHEN 'removed' THEN 'removed_unknown_reason'
-                        WHEN 'mined' THEN 'confirmed' ELSE 'superseded' END AS status
-    FROM lifecycle_events
-    WHERE txid = ANY(%s)
-    ORDER BY txid, event_time DESC,
-             CASE event_type WHEN 'mined' THEN 4 WHEN 'replaced' THEN 3 WHEN 'removed' THEN 2 ELSE 1 END DESC,
-             event_id
+    SELECT DISTINCT ON (e.txid) e.txid,
+        CASE e.event_type WHEN 'added' THEN 'observed_unconfirmed' WHEN 'removed' THEN 'removed_unknown_reason'
+                          WHEN 'mined' THEN 'confirmed' ELSE 'superseded' END AS status
+    FROM lifecycle_events e
+    {where}
+    ORDER BY e.txid, e.event_time DESC,
+             CASE e.event_type WHEN 'mined' THEN 4 WHEN 'replaced' THEN 3 WHEN 'removed' THEN 2 ELSE 1 END DESC,
+             e.event_id
 ) latest
 WHERE t.txid = latest.txid AND t.lifecycle_status IS DISTINCT FROM latest.status
 """
+PROJECT = _PROJECT_BODY.format(where="WHERE e.txid IN (SELECT DISTINCT txid FROM stage_events)")
+PROJECT_ALL = _PROJECT_BODY.format(where="")
 
-BATCH = 500
+# Bulk statements sort and hash hundreds of thousands of rows; the 4 MB default spills to disk.
+LOAD_WORK_MEM = "SET LOCAL work_mem = '128MB'"
+
+
+def project_all(connection) -> int:
+    """Recompute every transaction's status in one pass (after a backfill loaded with project=False)."""
+    with connection.transaction():
+        connection.execute(LOAD_WORK_MEM)
+        return connection.execute(PROJECT_ALL).rowcount
 
 
 def _event_params(event: dict) -> dict:
@@ -70,10 +91,13 @@ def _event_params(event: dict) -> dict:
     }
 
 
-def load_events(connection, source: Path) -> dict:
+def load_events(connection, source: Path, *, project: bool = True) -> dict:
     """Load a `process` output's events.jsonl (or its directory) in one transaction.
 
-    A directory whose events file was compacted to events.jsonl.gz is read transparently.
+    A directory whose events file was compacted to events.jsonl.gz is read transparently. Events are validated
+    in Python, streamed into a staging table with COPY, and merged with set-based statements.
+    project=False skips the status projection; a backfill then calls project_all() once at the end, because a
+    per-session projection rescans the growing events table every time.
     """
     if source.is_dir():
         plain, packed = source / "events.jsonl", source / "events.jsonl.gz"
@@ -82,15 +106,9 @@ def load_events(connection, source: Path) -> dict:
         raise ValueError(f"Events file not found: {source}")
     summary = {"source_file": str(source.resolve()), "rows_read": 0, "inserted": 0, "duplicates": 0,
                "skipped_without_txid": 0, "invalid": 0, "invalid_examples": [], "status_changes": 0}
-    touched: set[str] = set()
-
-    def project():
-        if touched:
-            summary["status_changes"] += connection.execute(PROJECT, (sorted(touched),)).rowcount
-            touched.clear()
-
+    valid = []
     opener = gzip.open if source.suffix == ".gz" else open
-    with connection.transaction(), opener(source, "rb") as lines:
+    with opener(source, "rb") as lines:
         for line_number, raw in enumerate(lines, start=1):
             summary["rows_read"] += 1
             try:
@@ -106,13 +124,19 @@ def load_events(connection, source: Path) -> dict:
                 if len(summary["invalid_examples"]) < 5:
                     summary["invalid_examples"].append({"line": line_number, "detail": str(error)})
                 continue
-            connection.execute(UPSERT_SEEN, params)
-            if connection.execute(INSERT_EVENT, params).fetchone():
-                summary["inserted"] += 1
-            else:
-                summary["duplicates"] += 1
-            touched.add(params["txid"])
-            if len(touched) >= BATCH:
-                project()
-        project()
+            valid.append(tuple(params[name] for name in STAGE_COLUMNS))
+    with connection.transaction():
+        # Inside a caller's transaction this block is a savepoint and ON COMMIT DROP hasn't fired yet.
+        connection.execute("DROP TABLE IF EXISTS pg_temp.stage_events")
+        connection.execute(CREATE_STAGE)
+        with connection.cursor().copy(f"COPY stage_events ({', '.join(STAGE_COLUMNS)}) FROM STDIN") as copy:
+            for record in valid:
+                copy.write_row(record)
+        connection.execute(LOAD_WORK_MEM)
+        connection.execute("ANALYZE stage_events")  # without statistics the planner assumes 200 rows
+        connection.execute(UPSERT_SEEN)
+        inserted = connection.execute(INSERT_EVENTS).rowcount
+        if project:
+            summary["status_changes"] = connection.execute(PROJECT).rowcount
+    summary.update({"inserted": inserted, "duplicates": len(valid) - inserted})
     return summary

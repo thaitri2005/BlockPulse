@@ -72,3 +72,16 @@ def test_reload_is_a_no_op_and_bad_rows_are_reported(conn, tmp_path):
     assert (again["inserted"], again["duplicates"], again["status_changes"]) == (0, 2, 0)
     assert status(conn) == "removed_unknown_reason"
     assert conn.execute("SELECT count(*) FROM lifecycle_events").fetchone()[0] == 2
+
+
+@needs_postgres
+def test_backfill_with_deferred_projection_matches_incremental(conn, tmp_path):
+    from blockpulse.lifecycle import project_all
+    path = tmp_path / "events.jsonl"
+    write(path, [event("added", 1), event("mined", 2)])
+    deferred = load_events(conn, path, project=False)
+    assert deferred["inserted"] == 2 and deferred["status_changes"] == 0
+    assert status(conn) == "observed_unconfirmed"  # not projected yet
+    assert project_all(conn) == 1
+    assert status(conn) == "confirmed"  # same answer the incremental load gives
+    assert project_all(conn) == 0  # nothing left to change
