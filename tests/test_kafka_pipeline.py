@@ -1,7 +1,7 @@
 import json
+from unittest.mock import patch
 
 import pytest
-from unittest.mock import patch
 
 from blockpulse.kafka_pipeline import RAW_TOPIC, RawKafkaPublisher, archive_topic, create_raw_topic, publish_capture
 

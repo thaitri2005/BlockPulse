@@ -75,7 +75,7 @@ def cases(seed: int) -> list[dict]:
             add("fee_outlier", "target", rate, variant, [], 1, _payment_values(rng, 2), float(rate), rng)
         # Benign controls: ordinary behaviour the detectors should not need to flag.
         add("ordinary_payment", "benign_control", 0, variant, [], rng.choice((1, 1, 2)), _payment_values(rng, 2), 1.0 + rng.random() * 4, rng)
-        add("round_amount_payment", "benign_control", 0, variant, [], 1, [rng.choice((50_000, 100_000, 500_000, 1_000_000)), _payment_values(rng, 1)[0]], 2.0 + rng.random() * 3, rng)
+        add("round_amount_payment", "benign_control", 0, variant, [], 1, [rng.choice((50_000, 100_000, 500_000, 1_000_000)), _payment_values(rng, 1)[0]], 2.0 + rng.random() * 3, rng)  # noqa: E501
         add("high_fee_payment", "benign_control", 0, variant, [], 1, _payment_values(rng, 2), 30.0 + rng.random() * 70, rng)
         add("small_batch", "benign_control", 0, variant, [], 2, _payment_values(rng, 6), 2.0 + rng.random() * 3, rng)
         add("small_consolidation", "benign_control", 0, variant, [], 4, _payment_values(rng, 1), 2.0 + rng.random() * 3, rng)

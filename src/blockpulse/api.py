@@ -1,8 +1,8 @@
 """Read-only HTTP API over the Postgres query store. It never writes and holds no feature or model logic."""
 
 import base64
-from datetime import datetime
 import json
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, HTTPException, Path, Query

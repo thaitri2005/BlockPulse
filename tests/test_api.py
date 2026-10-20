@@ -8,8 +8,8 @@ from blockpulse import db
 from blockpulse.api import create_app, decode_cursor, encode_cursor
 from blockpulse.lifecycle import load_events
 from blockpulse.results import load_screened
-
-from tests.test_lifecycle import event, write as write_events
+from tests.test_lifecycle import event
+from tests.test_lifecycle import write as write_events
 from tests.test_results import screened_row, write_rows
 
 PG_DSN = os.environ.get("BLOCKPULSE_TEST_DSN")

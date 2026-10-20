@@ -3,10 +3,10 @@
 import hashlib
 import json
 import os
-from pathlib import Path
 import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from blockpulse.events import reject_nonfinite
 from blockpulse.kafka_pipeline import DEFAULT_BOOTSTRAP_SERVERS, ENRICHED_TOPIC, _kafka_types
@@ -202,7 +202,7 @@ def archive_enriched_to_parquet(
         "consumer_lag_messages": final_lag,
     }
     write_summary(manifest_path, summary)
-    print(json.dumps({"timestamp": _now(), "level": "INFO", "event": "parquet_archive_finished", **summary}, separators=(",", ":")), file=sys.stderr, flush=True)
+    print(json.dumps({"timestamp": _now(), "level": "INFO", "event": "parquet_archive_finished", **summary}, separators=(",", ":")), file=sys.stderr, flush=True)  # noqa: E501
     return summary
 
 

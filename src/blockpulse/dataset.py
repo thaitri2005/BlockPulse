@@ -5,9 +5,9 @@ order, so rows captured together never straddle train/calibration/test. The mani
 which files went where, so the same split can be rebuilt and verified later.
 """
 
-from datetime import datetime
 import hashlib
 import json
+from datetime import datetime
 from pathlib import Path
 
 from blockpulse.events import reject_nonfinite

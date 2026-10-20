@@ -6,13 +6,13 @@ is an appended event, so the history can be audited and a rollback is just anoth
 """
 
 import csv
-from dataclasses import asdict
 import hashlib
 import json
 import shutil
+from dataclasses import asdict
 from pathlib import Path
 
-from blockpulse.detector import DetectorConfig, RULESET_VERSION, screen_transaction
+from blockpulse.detector import RULESET_VERSION, DetectorConfig, screen_transaction
 from blockpulse.features import FEATURE_SET_VERSION
 from blockpulse.storage import utc_now
 
@@ -78,6 +78,7 @@ def package_model(manifest: dict, screened_root: Path, model_dir: Path, evaluati
                   output_root: Path) -> Path:
     """Bundle a trained model with its threshold, training reference percentiles, and evidence checksums."""
     import numpy as np
+
     from blockpulse.dataset import load_split
     from blockpulse.model import MODEL_COLUMNS, feature_matrix, load_model
 
@@ -144,6 +145,7 @@ def score_rows(directory: Path, rows: list[dict]) -> list[dict]:
         config = DetectorConfig(**bundle["config"])
         return [{"flag": screen_transaction(row["features"], config)["is_flagged"], "score": None} for row in rows]
     import joblib
+
     from blockpulse.model import feature_matrix, unusualness
     matrix, kept, _ = feature_matrix(rows)
     scores = unusualness(joblib.load(directory / "model.joblib"), matrix)

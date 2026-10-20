@@ -1,4 +1,3 @@
-import json
 
 from blockpulse.events import parse_record
 

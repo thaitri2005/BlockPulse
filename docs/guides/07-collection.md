@@ -9,7 +9,7 @@ Every runner calls the same tested commands in [`src/blockpulse/collector.py`](.
 | Command | What it does |
 | --- | --- |
 | `blockpulse collect-loop` | Captures sessions back to back into `data/raw/session-*` until a deadline, a session limit, or low disk (default: stop below 15 GiB free). Each session survives up to 300 reconnects. Stops cleanly on Ctrl+C or SIGINT. |
-| `blockpulse process-pending` | For every finished capture not yet handled: process, rule-screen, write the [lake](05-lake-and-athena.md) tables through the quality gate, gzip the bulky events file, add a row to `data/capture_log.csv`. `--load-db` also loads Postgres once per session. Safe to repeat: finished stages are skipped, an interrupted stage is moved aside (never deleted) and redone, and a lock stops two processors colliding. |
+| `blockpulse process-pending` | For every finished capture not yet handled: process, rule-screen, write the [lake](05-lake-and-athena.md) tables through the quality gate, gzip the bulky events file and the raw capture, add a row to `data/capture_log.csv`. `--load-db` also loads Postgres once per session. Safe to repeat: finished stages are skipped, an interrupted stage is moved aside (never deleted) and redone, and a lock stops two processors colliding. |
 | `blockpulse collect` | One `collect-loop` session, then `process-pending`. |
 | `blockpulse sync-pending` | Uploads each processed session and its lake files to S3 once, plus `status/status.json` and the capture log. |
 
@@ -41,4 +41,4 @@ Measured on the AWS run: about 200 MB an hour after compaction (raw 123 MB, proc
 1. If the data was collected on AWS, download it ([08](08-aws.md#download-the-data-and-use-it)).
 2. `blockpulse process-pending` builds anything missing, including lake tables for older sessions.
 3. Rerun the [ML evaluation](06-ml-evaluation.md) on a new manifest and compare with the previous one.
-4. Optional: `blockpulse process-pending --load-db` for the Postgres dashboard. Loading is row by row (about 4 ms a row), so millions of rows take hours; the lake and DuckDB answer the same questions in seconds.
+4. For the API and dashboard: `blockpulse serving-rebuild` after a large download (about 11 min for 2.65 M transactions), or `process-pending --load-db` for a few new sessions ([04](04-postgres-api-dashboard.md#two-ways-data-gets-in)).

@@ -15,13 +15,13 @@ session, so rebuilding a session overwrites the same files with the same bytes: 
 The schema here is the single source of truth; `glue_columns()` exports it for the Athena tables in Terraform.
 """
 
+import gzip
+import json
+import re
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timezone
-import gzip
-import json
 from pathlib import Path
-import re
 
 LAKE_SCHEMA_VERSION = 1
 TXID = re.compile(r"^[0-9a-f]{64}$")

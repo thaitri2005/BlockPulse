@@ -35,14 +35,14 @@ This is at-least-once delivery working as designed: the cost of a crash is a sma
 
 Same 4,641 messages; the Kafka container was restarted 5 seconds into enrichment.
 
-| Check | Result |
-| --- | --- |
-| Consumption completes after the broker is back | Yes, after a rerun; final lag 0 |
-| No message lost | 0 of 4,641 missing |
-| Duplicates bounded | 233 messages enriched twice |
-| Idempotent sink | 4,874 records read, exactly 4,641 files |
+| Check | First run | After the fix (2026-10-20) |
+| --- | --- | --- |
+| Worker survives the restart | No: stopped with `UNKNOWN_MEMBER_ID` | **Yes**: skipped one commit, rejoined, finished |
+| No message lost | 0 of 4,641 missing (after a manual rerun) | 0 of 4,641 missing |
+| Duplicates | 233 | 120 |
+| Idempotent sink | 4,641 files from 4,874 records | 4,641 files from 4,761 records |
 
-The worker **did not survive** the restart: the broker forgot the consumer group, so the next offset commit was rejected (`UNKNOWN_MEMBER_ID`), and the worker stopped rather than committing anything uncertain. That is the safe failure, and rerunning it recovered everything. A long-running deployment should run the worker under a supervisor that restarts it (systemd `Restart=on-failure`, as the AWS collector services already do); making the worker rejoin by itself is a possible improvement.
+**What happened, and the fix.** The broker forgot the consumer group when it restarted, so the worker's next offset commit was rejected. At first the worker treated that as fatal and exited (safe, but it needed a restart). Now a commit rejected because the group changed (`UNKNOWN_MEMBER_ID`, `ILLEGAL_GENERATION`, `REBALANCE_IN_PROGRESS`, coordinator changes) is skipped and logged; the output was already acknowledged, the consumer rejoins on its next poll, and the uncommitted messages are redelivered and absorbed by the idempotent sink. Every other commit error, and any failed output delivery, still stops the worker without committing (tested).
 
 ### 3. Postgres load crashed mid-transaction: passed
 
@@ -61,5 +61,4 @@ Each session loads in one transaction, so a crash leaves nothing behind, and the
 ## Limits
 
 - One machine and one broker: the drills test correctness under crashes, not high availability.
-- The worker doesn't rejoin a group by itself after a broker restart; it relies on being restarted.
-- Postgres loading is row by row (about 4 ms a row), which is why this drill takes about 18 minutes. Correctness, not speed, was the point.
+- This drill was run with the row-by-row loader and took about 18 minutes; with the bulk loader each load takes seconds, so the kill window is shorter. The invariant it tests (one transaction per session, unique keys) is unchanged.

@@ -5,7 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from blockpulse.detector import DetectorConfig, RULESET_VERSION, screen_transaction
+from blockpulse.detector import RULESET_VERSION, DetectorConfig, screen_transaction
 from blockpulse.features import FEATURE_NAMES, FEATURE_SET_VERSION
 from blockpulse.storage import JsonlWriter, write_summary
 
@@ -35,9 +35,9 @@ def default_cases():
     return [
         _case("ordinary_transfer", "ordinary_control", "One input and two outputs.", 1, 2, 1, []),
         _case("batch_payout_shape", "target_shape", "Few inputs and many outputs.", 1, 12, 1, ["many_outputs"]),
-        _case("benign_batch_counterexample", "benign_counterexample", "A routine batch can have the same shape as a flagged fan-out.", 1, 12, 1, ["many_outputs"]),
+        _case("benign_batch_counterexample", "benign_counterexample", "A routine batch can have the same shape as a flagged fan-out.", 1, 12, 1, ["many_outputs"]),  # noqa: E501
         _case("consolidation_shape", "target_shape", "Many inputs and one output.", 12, 1, 1, ["many_inputs"]),
-        _case("benign_consolidation_counterexample", "benign_counterexample", "A benign consolidation can have the same shape as a flagged fan-in.", 12, 1, 1, ["many_inputs"]),
+        _case("benign_consolidation_counterexample", "benign_counterexample", "A benign consolidation can have the same shape as a flagged fan-in.", 12, 1, 1, ["many_inputs"]),  # noqa: E501
         _case("repeated_outputs_shape", "target_shape", "Several inputs and three equal positive outputs.", 3, 3, 3, ["repeated_output_values"]),
         _case("fanin_just_below_default", "boundary_control", "Nine inputs is just below the default fan-in threshold.", 9, 1, 1, []),
         _case("fanout_at_default_boundary", "boundary_shape", "Ten outputs is exactly the default fan-out threshold.", 2, 10, 1, ["many_outputs"]),
@@ -131,7 +131,7 @@ def run_rule_lab(output: Path, config: DetectorConfig | None = None) -> dict:
                         "matched": matched,
                     }
                     sweep_records.append(sweep_row)
-                    sweep_table.writerow({key: str(value).lower() if key == "matched" else value for key, value in sweep_row.items() if key != "schema_version"})
+                    sweep_table.writerow({key: str(value).lower() if key == "matched" else value for key, value in sweep_row.items() if key != "schema_version"})  # noqa: E501
                     summary["threshold_sweep_rows"] += 1
     summary["scenario_sha256"] = hashlib.sha256(canonical).hexdigest()
     summary["interpretation_note"] = (

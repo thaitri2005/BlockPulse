@@ -12,7 +12,18 @@ capture messages.jsonl
 Postgres --> read-only API (blockpulse serve)      Postgres --> Grafana dashboard
 ```
 
-The files remain the source of truth. Postgres is a rebuildable query copy: dropping the database and re-running the load commands restores it.
+The files remain the source of truth, and the lake is the analytics store. Postgres is the **serving copy** behind the API and dashboard: it holds all the data (2.65 M scores, 5.86 M lifecycle events, 2.82 M transactions as of 2026-10-20) and can always be rebuilt.
+
+## Two ways data gets in
+
+| Path | When | How | Measured |
+| --- | --- | --- | --- |
+| **Incremental** (`load-results`, `load-events`, `process-pending --load-db`) | A new session, about once an hour | Validate in Python, `COPY` into a temporary staging table, merge with set-based SQL in one transaction (`ON CONFLICT DO NOTHING`), then project lifecycle status for the transactions touched | One 57k-transaction session: scores 5.2 s, events 12.5 s, against 271 s and 369 s for the old row-by-row loader (52x and 30x), with identical table contents (checksummed) |
+| **Rebuild** (`serving-rebuild`) | Backfills, or after a schema change | Read the lake with DuckDB, `COPY` into new tables with no indexes, build indexes once, then swap the new tables in with a rename inside one transaction | All 98 runs (2.65 M scores, 5.86 M events) in **10.6 min**; the swap takes 0.2 s; per-run counts match the screened files exactly |
+
+**Why two paths.** Bulk merging is fast while the tables fit in memory, but `lifecycle_events` is keyed by a random hash, so once its index outgrows Postgres's cache every insert waits for a random disk read (`DataFileRead`). Measured on this laptop: one session took 5–18 s on an empty database, then about 60 s once the table held 1.1 M rows, and it kept rising. Loading 89 hours one session at a time would have taken hours. Rebuilding avoids random index writes altogether: indexes are built once as sorted bulk builds. Hourly incremental loads stay on the merge path, where a few seconds per session doesn't matter.
+
+**Correctness of the rebuild.** A test loads the same sessions both ways and requires identical rows in all three tables. Signal explanations aren't stored in the lake; the rebuild regenerates them with the same rules and refuses to continue if any regenerated rule ID differs from the lake's. Older runs that predate the lake are read from their screened and processed files. Until the final swap nothing touches the live tables, so a failed rebuild leaves them unchanged. Score `id` values are reassigned by a rebuild; use `txid` or `(run_id, txid)` as the stable identity.
 
 ## Run it
 
@@ -21,12 +32,12 @@ pip install -e ".[m2,dev]"
 docker compose --profile m2 up -d --wait          # Postgres + Grafana (Kafka is the separate m1 profile)
 .\.venv\Scripts\python.exe -m blockpulse db-init  # create tables; safe to repeat
 
-.\.venv\Scripts\python.exe -m blockpulse load-results data/screened/phase0-10min-20261009
-.\.venv\Scripts\python.exe -m blockpulse load-events  data/processed/phase0-10min-20261009-fixed
+.\.venv\Scripts\python.exe -m blockpulse serving-rebuild    # everything in the lake, about 11 min for 2.65 M transactions
+.\.venv\Scripts\python.exe -m blockpulse process-pending --load-db   # afterwards: new sessions, incrementally
 .\.venv\Scripts\python.exe -m blockpulse serve        # http://127.0.0.1:8000/docs
 ```
 
-Grafana is at http://127.0.0.1:3000 (user `admin`, password `blockpulse_dev`), dashboard "BlockPulse overview". The time range defaults to the last 30 days because loaded captures keep their original receive times; widen it if the panels are empty. Memory limits: Postgres 512 MB, Grafana 384 MB. Everything binds to localhost. The passwords are local-development defaults; override with `POSTGRES_PASSWORD` and `GRAFANA_PASSWORD`, and `BLOCKPULSE_DSN` for the app.
+Grafana is at http://127.0.0.1:3000 (user `admin`, password `blockpulse_dev`), dashboard "BlockPulse overview". The time range defaults to the last 30 days because loaded captures keep their original receive times; widen it if the panels are empty. Memory limits: Postgres 512 MB, Grafana 384 MB. The full database is about 5.5 GB on disk. Everything binds to localhost. The passwords are local-development defaults; override with `POSTGRES_PASSWORD` and `GRAFANA_PASSWORD`, and `BLOCKPULSE_DSN` for the app.
 
 Offline demo with synthetic data and no live source: `powershell -File scripts/demo_m2.ps1`. It uses its own database, `blockpulse_demo`, so fake rows never mix with real ones.
 

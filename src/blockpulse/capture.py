@@ -2,15 +2,15 @@
 
 import asyncio
 import base64
-from collections import Counter
-from dataclasses import asdict, dataclass
 import json
 import math
-from pathlib import Path
 import random
 import time
-from urllib.parse import urlsplit
 import uuid
+from collections import Counter
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from urllib.parse import urlsplit
 
 from websockets.asyncio.client import connect
 from websockets.exceptions import WebSocketException

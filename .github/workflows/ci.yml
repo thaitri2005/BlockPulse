@@ -45,6 +45,8 @@ jobs:
         run: |
           pip install --require-hashes -r requirements.lock
           pip install --no-deps -e .
+      - name: Lint
+        run: ruff check src tests infra
       - name: Test
         run: pytest -q
 

@@ -1,6 +1,6 @@
 import json
-from urllib.error import HTTPError
 from unittest.mock import patch
+from urllib.error import HTTPError
 
 import pytest
 
@@ -19,7 +19,6 @@ def envelope(*entries):
 def detail(txid):
     return {"txid": txid, "vin": [{"sequence": 1}], "vout": [{"value": 42}], "weight": 400, "fee": 10}
 
-import pytest
 
 
 def test_complete_transaction_does_not_call_api():

@@ -81,8 +81,6 @@ def test_kafka_commands_wire_arguments_without_starting_broker(tmp_path, capsys)
 
 
 def test_capture_kafka_writes_file_then_uses_kafka_sink(tmp_path, capsys):
-    import asyncio
-    from unittest.mock import AsyncMock
     from blockpulse.capture import CaptureConfig
     output = tmp_path / "capture"
     output.mkdir()

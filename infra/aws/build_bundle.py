@@ -10,9 +10,9 @@ Usage: python infra/aws/build_bundle.py [--output PATH]
 
 import argparse
 import hashlib
-from pathlib import Path
 import sys
 import zipfile
+from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_OUTPUT = ROOT / "infra" / "aws" / "build" / "blockpulse-app.zip"

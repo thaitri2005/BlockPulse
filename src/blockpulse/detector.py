@@ -67,7 +67,7 @@ def screen_transaction(features: dict, config: DetectorConfig | None = None) -> 
     if n_in >= config.repeated_value_min_inputs and repeated >= config.repeated_value_min:
         signals.append({
             "rule_id": "repeated_output_values",
-            "explanation": f"{repeated} positive-value outputs share one amount and the transaction has at least {config.repeated_value_min_inputs} inputs; this can occur in benign transactions and is only a structural heuristic.",
+            "explanation": f"{repeated} positive-value outputs share one amount and the transaction has at least {config.repeated_value_min_inputs} inputs; this can occur in benign transactions and is only a structural heuristic.",  # noqa: E501
         })
     return {
         "ruleset_version": RULESET_VERSION,

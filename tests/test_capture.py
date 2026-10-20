@@ -31,7 +31,8 @@ class ScriptedConnection:
 
 
 def test_disconnect_reconnect_and_sequence_discontinuity(tmp_path, transaction):
-    text = lambda n: json.dumps({"mempool-transactions": {"sequence": n, "added": [transaction]}})
+    def text(n):
+        return json.dumps({"mempool-transactions": {"sequence": n, "added": [transaction]}})
     first = ScriptedConnection([text(10), text(12), OSError("simulated disconnect")])
     second = ScriptedConnection([text(80)])
     connections = iter([first, second])

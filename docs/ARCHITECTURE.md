@@ -19,7 +19,8 @@ What is built, how the pieces connect, and where the code lives. For why, see th
            |                 |                         |
    lake stage: quality   load-results / load-events   build-dataset -> train / evaluate / sweep
    gate -> partitioned   -> Postgres -> API + Grafana  -> detector registry (champion: rules)
-   Parquet (dt/hour)
+   Parquet (dt/hour)       ^
+           |---------------' serving-rebuild (bulk, from the lake)
            |
    DuckDB (lake-query) locally, Athena over S3 in AWS
 ```
@@ -28,7 +29,8 @@ Unattended runs wrap the same steps: `collect-loop` captures hourly sessions, `p
 
 Design rules that hold everywhere:
 
-- **Raw is the source of truth.** Everything downstream can be rebuilt from `data/raw`.
+- **Raw is the source of truth.** Everything downstream can be rebuilt from `data/raw`. Finished captures are gzipped (`messages.jsonl.gz`, about 5x smaller); every reader opens either form.
+- **The lake is the analytics store; Postgres is the serving copy.** Postgres holds all the data for the API and dashboard and can be rebuilt from the lake in minutes.
 - **Every stage is idempotent.** Output folders are never overwritten; finished stages are detected and skipped; Postgres loads and Kafka consumers are safe to repeat (at-least-once delivery plus idempotent sinks).
 - **One implementation per concern.** One feature function, one rule set, one lake schema (which also generates the Athena catalog), one collector for every runner.
 - **Evidence is recorded.** Summaries, quality reports, manifests and checksums make every claimed number traceable.
@@ -41,10 +43,10 @@ Design rules that hold everywhere:
 | --- | --- | --- |
 | Capture and process | `capture`, `process`, `detect`, `lab`, `trace` | [01](guides/01-capture-and-process.md), [02](guides/02-structural-rules.md) |
 | Kafka | `kafka-init`, `capture-kafka`, `kafka-replay`, `kafka-archive`, `kafka-enrich`, `kafka-parquet` | [03](guides/03-kafka.md) |
-| Postgres and API | `db-init`, `load-results`, `load-events`, `serve` | [04](guides/04-postgres-api-dashboard.md) |
+| Postgres and API | `db-init`, `load-results`, `load-events`, `serving-rebuild`, `serve` | [04](guides/04-postgres-api-dashboard.md) |
 | Lake and SQL | `lake-query`, `lake-schema` (the lake itself is built by `process-pending`) | [05](guides/05-lake-and-athena.md) |
 | ML evaluation | `build-dataset`, `verify-dataset`, `train-iforest`, `evaluate-iforest`, `sweep`, `detectors ...` | [06](guides/06-ml-evaluation.md) |
-| Unattended collection | `collect`, `collect-loop`, `process-pending`, `sync-pending` | [07](guides/07-collection.md), [08](guides/08-aws.md) |
+| Unattended collection | `collect`, `collect-loop`, `process-pending`, `sync-pending`, `compact-raw` | [07](guides/07-collection.md), [08](guides/08-aws.md) |
 | Load test and drills | `benchmark batch`, `benchmark streaming`, `drill enrich-crash`, `drill broker-restart`, `drill postgres-crash` | [09](guides/09-load-test.md), [10](guides/10-failure-drills.md) |
 
 ## Code
@@ -61,7 +63,8 @@ Python package `src/blockpulse/` (about 4,500 lines, flat on purpose):
 | `storage.py` | 56 | Never-overwrite run folders, atomic summaries |
 | `kafka_pipeline.py`, `kafka_workers.py` | 571 | Topics, publisher, replay, archive consumer, enrichment consumer (batched checkpoints) |
 | `enrichment.py`, `parquet_archive.py` | 370 | Rate-limited REST enrichment; Kafka-to-Parquet archive |
-| `db.py`, `results.py`, `lifecycle.py` + `migrations/` | 257 | Postgres migrations, duplicate-safe loads, lifecycle status projection |
+| `db.py`, `results.py`, `lifecycle.py` + `migrations/` | 303 | Postgres migrations; bulk (`COPY` + set-based merge) duplicate-safe loads; lifecycle status projection |
+| `serving.py` | 190 | Rebuild the serving tables from the lake and swap them in atomically (`serving-rebuild`) |
 | `api.py`, `trace.py` | 238 | Read-only FastAPI; one transaction traced back to its raw message |
 | `lake.py`, `analytics.py` | 356 | Lake contracts, quality gate, partitioned writer, Glue schema export; DuckDB views |
 | `dataset.py` | 320 | Checksummed chronological manifests, lake- or JSONL-backed split loading |
@@ -105,5 +108,5 @@ Elsewhere:
 - One Kafka broker and one instance: nothing is highly available.
 - Scoring is offline (files in, files out); no streaming feature or score worker.
 - The Kafka path and the Postgres path connect through files, not topics.
-- Postgres loading is row by row (about 4 ms a row): fine for a demo, slow for millions of rows. The lake is the analytics store.
+- Postgres is a serving copy on one 512 MB container. Incremental loads slow down as the random-keyed `lifecycle_events` index outgrows memory, so large backfills use `serving-rebuild` ([04](guides/04-postgres-api-dashboard.md#two-ways-data-gets-in)).
 - The Kafka-to-Parquet archive writes one file per message (built for restart clarity); the lake is the right-sized store.

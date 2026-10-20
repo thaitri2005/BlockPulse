@@ -4,20 +4,20 @@ import argparse
 import asyncio
 import json
 import shutil
-from pathlib import Path
 import sys
+from pathlib import Path
 
-from blockpulse.process import process_capture
 from blockpulse.detect import detect_features
 from blockpulse.detector import DetectorConfig
-from blockpulse.lab import run_rule_lab
 from blockpulse.kafka_pipeline import (
     DEFAULT_BOOTSTRAP_SERVERS,
+    RawKafkaPublisher,
     archive_topic,
     create_m1_topics,
-    RawKafkaPublisher,
     publish_capture,
 )
+from blockpulse.lab import run_rule_lab
+from blockpulse.process import process_capture
 from blockpulse.storage import StorageError, new_run_path
 
 
@@ -171,6 +171,10 @@ def main(argv: list[str] | None = None) -> int:
     lake_query = commands.add_parser("lake-query", help="Run SQL over the local Parquet lake with DuckDB (same SQL as Athena)")
     lake_query.add_argument("query", help="A .sql file, or a named query from analytics/queries (e.g. hourly_flag_rate)")
     lake_query.add_argument("--root", type=Path, default=Path("data"))
+    rebuild = commands.add_parser("serving-rebuild", help="Rebuild the Postgres serving tables from the lake in bulk and swap them in")
+    rebuild.add_argument("--root", type=Path, default=Path("data"))
+    compact = commands.add_parser("compact-raw", help="Gzip the raw capture of every fully processed session (about 5x smaller)")
+    compact.add_argument("--root", type=Path, default=Path("data"))
     lake_schema = commands.add_parser("lake-schema", help="Print the lake table schemas (the source for the Athena/Glue tables)")
     lake_schema.add_argument("--output", type=Path, help="Write to this file instead of printing")
     sync_parser = commands.add_parser("sync-pending", help="Upload each processed session to S3 once, plus a status file")
@@ -380,6 +384,7 @@ def main(argv: list[str] | None = None) -> int:
                            "registered": {k: v["family"] for k, v in current["registered"].items()}, "recent_events": events[-8:]}
         elif args.command in ("collect", "collect-loop", "process-pending", "sync-pending"):
             from datetime import datetime
+
             from blockpulse import collector
             output = None
             layout = collector.Layout(args.root)
@@ -407,6 +412,27 @@ def main(argv: list[str] | None = None) -> int:
                 raise RuntimeError('duckdb is not installed; run: pip install -e ".[analytics]"') from error
             output = None
             summary = run_query(args.root, args.query)
+            code = 0
+        elif args.command == "serving-rebuild":
+            from blockpulse.serving import rebuild_serving
+            output = None
+            summary = _kafka_call("Serving rebuild", lambda: rebuild_serving(args.root))
+            code = 0
+        elif args.command == "compact-raw":
+            from blockpulse import collector
+            from blockpulse.storage import compress_capture
+            output = None
+            layout = collector.Layout(args.root)
+            pending = set(collector.pending_sessions(layout))
+            saved, compacted, skipped = 0, 0, []
+            for name in collector.finished_captures(layout):
+                if name in pending:  # not fully processed yet: leave it for process-pending
+                    skipped.append(name)
+                    continue
+                bytes_saved = compress_capture(layout.raw / name)
+                saved += bytes_saved
+                compacted += bytes_saved > 0
+            summary = {"sessions_compacted": compacted, "gb_saved": round(saved / 1e9, 2), "skipped_unprocessed": skipped}
             code = 0
         elif args.command == "lake-schema":
             from blockpulse.lake import glue_columns
@@ -461,8 +487,8 @@ def main(argv: list[str] | None = None) -> int:
             )
             code = 0
         elif args.command == "kafka-enrich":
-            from blockpulse.kafka_workers import enrich_topic
             from blockpulse.enrichment import RateLimitedEnricher
+            from blockpulse.kafka_workers import enrich_topic
             output = None
             enricher = RateLimitedEnricher(
                 api_base=args.api_base, requests_per_second=args.requests_per_second,

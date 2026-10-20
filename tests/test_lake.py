@@ -89,6 +89,7 @@ def test_events_without_a_txid_are_quarantined_not_dropped():
 
 def test_collector_builds_the_lake_and_uploads_it(tmp_path, transaction, monkeypatch):
     import sys
+
     from tests.test_collector import FAKE_AWS
     layout = captured_layout(tmp_path / "data", transaction, sessions=1)
     result = collector.process_pending(layout)

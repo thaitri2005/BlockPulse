@@ -1,10 +1,10 @@
 """Normalize captured messages without guessing unsupported provider shapes."""
 
-from dataclasses import dataclass, field
-from datetime import datetime
 import hashlib
 import json
 import re
+from dataclasses import dataclass, field
+from datetime import datetime
 
 EVENT_TYPES = ("added", "removed", "mined", "replaced")
 CHANNELS = ("mempool-transactions", "mempool-txids")

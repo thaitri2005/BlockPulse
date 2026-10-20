@@ -5,7 +5,7 @@ import hashlib
 import json
 from pathlib import Path
 
-from blockpulse.detector import DetectorConfig, RULESET_VERSION, screen_transaction
+from blockpulse.detector import RULESET_VERSION, DetectorConfig, screen_transaction
 from blockpulse.events import reject_nonfinite
 from blockpulse.features import FEATURE_NAMES, FEATURE_SET_VERSION
 from blockpulse.storage import JsonlWriter, write_summary
