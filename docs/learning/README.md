@@ -37,6 +37,7 @@ Each exercise is sized for one sitting of about 30-60 minutes. Stop when a conce
 | 21 | Modelling with dbt | Sources, staging, intermediate and marts; `ref` and lineage; schema and data tests; why one rule should live in one place | `analytics/dbt/`; [dbt guide](../guides/11-dbt.md) | To write together |
 | 22 | Exactly-once output from an at-least-once stream | Micro-batches, offset-named files, commit after write, why replay must delete by offset range | `stream_lake.py` → `stream_to_lake()`, `_remove_replayed()`; `tests/test_stream_lake.py` | To write together |
 | 23 | Metrics and alerts | Counters vs gauges vs histograms, label cardinality, `rate()`, pending vs firing | `metrics.py`; `observability/prometheus/alerts.yml`; [streaming guide](../guides/12-streaming-lake-and-metrics.md) | To write together |
+| 24 | Orchestration: DAGs, retries, backfills | Data intervals, idempotent tasks, retries with backoff, pools vs `max_active_runs`, why a killed task must release its lock | `orchestration/airflow/dags/blockpulse_daily.py`; `collector.py` → `_Lock`; [Airflow guide](../guides/13-airflow.md) | To write together |
 
 ## Exercise outlines
 

@@ -11,7 +11,7 @@ The project owner is building this to learn data engineering. Optimize for their
 
 ## Where things are
 
-- Plan, status, roadmap (DE1-DE6), decisions: `docs/PROJECT_PLAN.md`. The purpose is data engineering skill (D18).
+- Plan, status, roadmap (DE1-DE7), decisions: `docs/PROJECT_PLAN.md`. The purpose is data engineering skill (D18).
 - What's built: `docs/ARCHITECTURE.md`. How to run each part: `docs/guides/01-...08-*.md`. Keep them in sync with the code.
 - Evidence for every measured claim: `docs/experiments/YYYY-MM-DD-*.md`. The README's "What's done" table must only cite proven numbers.
 - `docs/archive/original-design.md` is the historical design; don't update it.
@@ -19,10 +19,11 @@ The project owner is building this to learn data engineering. Optimize for their
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/guides/04-postgres-api-dashboard.md): 147 passed, 1 skipped; without it: 131 passed, 17 skipped
+.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/guides/04-postgres-api-dashboard.md): 154 passed, 2 skipped (one is Linux-only); without it: 136 passed, 20 skipped
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
 docker compose --profile m2 up -d --wait          # Postgres + Grafana + Prometheus (~1.1 GB); `stop` when done
+docker compose --profile airflow up -d --wait --build   # Airflow at 127.0.0.1:8080 (~1.0-1.3 GB); DAG data root is data/orchestrated/
 ```
 
 Rebuild the whole M3 chain and compare with the recorded artifacts: `powershell -File scripts/reproduce_m3.ps1 [-Manifest data/datasets/dataset-<id>.json]` (`blockpulse verify-dataset <manifest>` checks a manifest alone). Model splits read from the Parquet lake when it matches the manifest; manifests built before 2026-10-19 keep file order and read JSONL only, so old results reproduce exactly. The champion detector is in `data/detectors/registry.jsonl` (`blockpulse detectors status`); the rules are champion until a model clears the gate.

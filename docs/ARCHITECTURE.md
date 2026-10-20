@@ -30,7 +30,12 @@ What is built, how the pieces connect, and where the code lives. For why, see th
    dbt (DuckDB): staging -> int_transaction_lifecycle -> marts (fct_transactions, fct_hourly_activity, ...)
 ```
 
-Unattended runs wrap the same steps: `collect-loop` captures hourly sessions, `process-pending` brings every finished session up to date (process, screen, lake, compact, log, optional Postgres load), `sync-pending` uploads to S3. On AWS these run as systemd services on one instance ([08](guides/08-aws.md)).
+Unattended runs wrap the same steps: `collect-loop` captures hourly sessions, `process-pending` brings every finished session up to date (process, screen, lake, compact, log, optional Postgres load), `sync-pending` uploads to S3. On AWS these run as systemd services on one instance ([08](guides/08-aws.md)). Airflow runs the same commands as a DAG, one run per UTC day (`process-pending --date`), with retries and backfills ([13](guides/13-airflow.md)):
+
+```text
+screen ---> lake ---+--> load (Postgres, then compact) <--- prepare_database
+                    +--> dbt_build
+```
 
 Design rules that hold everywhere:
 
@@ -52,7 +57,8 @@ Design rules that hold everywhere:
 | Lake and SQL | `lake-query`, `lake-schema` (the lake itself is built by `process-pending`) | [05](guides/05-lake-and-athena.md) |
 | Modelling | `dbt build`, `dbt docs generate`, any dbt command (`blockpulse dbt ...`) | [11](guides/11-dbt.md) |
 | ML evaluation | `build-dataset`, `verify-dataset`, `train-iforest`, `evaluate-iforest`, `sweep`, `detectors ...` | [06](guides/06-ml-evaluation.md) |
-| Unattended collection | `collect`, `collect-loop`, `process-pending`, `sync-pending`, `compact-raw` | [07](guides/07-collection.md), [08](guides/08-aws.md) |
+| Unattended collection | `collect`, `collect-loop`, `process-pending` (`--date` for one day), `sync-pending`, `compact-raw` | [07](guides/07-collection.md), [08](guides/08-aws.md) |
+| Orchestration | Airflow DAG `blockpulse_daily` in the `airflow` Compose profile; `airflow backfill create` | [13](guides/13-airflow.md) |
 | Load test and drills | `benchmark batch`, `benchmark streaming`, `drill enrich-crash`, `drill broker-restart`, `drill postgres-crash` | [09](guides/09-load-test.md), [10](guides/10-failure-drills.md) |
 
 ## Code
@@ -78,10 +84,10 @@ Python package `src/blockpulse/` (about 4,500 lines, flat on purpose):
 | `lake.py`, `analytics.py` | 356 | Lake contracts, quality gate, partitioned writer, Glue schema export; DuckDB views |
 | `dataset.py` | 320 | Checksummed chronological manifests, lake- or JSONL-backed split loading |
 | `model.py`, `evaluate.py`, `sweep.py`, `registry.py` | 719 | Isolation Forest, threshold calibration, synthetic sweep, detector registry and gate |
-| `collector.py` | 314 | Capture loop, idempotent session processing, lock, S3 upload |
+| `collector.py` | 359 | Capture loop, idempotent session processing (all pending, or one start date), lock, S3 upload |
 | `benchmark.py` | 198 | Batch and streaming load tests on recorded sessions (`benchmark`) |
 | `drills.py` | 191 | Failure drills: worker crash, broker restart, Postgres crash (`drill`) |
-| `cli.py` | 560 | Command-line entry point |
+| `cli.py` | 572 | Command-line entry point |
 
 Elsewhere:
 
@@ -90,13 +96,14 @@ Elsewhere:
 | `tests/` | pytest; Postgres tests opt in with `BLOCKPULSE_TEST_DSN` |
 | `analytics/queries/` | Shared SQL, run by DuckDB locally and saved as Athena named queries |
 | `analytics/dbt/` | dbt project: staging, intermediate and mart models with tests, over the lake |
+| `orchestration/airflow/` | Airflow image (BlockPulse in its own venv) and the `blockpulse_daily` DAG |
 | `infra/aws/terraform/` | The AWS collector stack (VPC, instance, S3, IAM, Glue, Athena, budget) and its mocked-provider tests |
 | `infra/aws/instance/` | `install.sh`, `deadline-check.sh` and the hardened systemd units that run on the instance |
 | `infra/aws/tests/` | Amazon Linux 2023 container rehearsals: bootstrap smoke test and real systemd end to end |
 | `infra/aws/build_bundle.py` | Reproducible app zip for the instance |
 | `observability/grafana/` | Provisioned datasources (Postgres, Prometheus) and dashboards (data, pipeline health) |
 | `observability/prometheus/` | Scrape config and alert rules |
-| `compose.yaml` | Profiles `m1` (Kafka) and `m2` (Postgres, Grafana, Prometheus) |
+| `compose.yaml` | Profiles `m1` (Kafka), `m2` (Postgres, Grafana, Prometheus) and `airflow` |
 | `scripts/` | Laptop collection task, M2 demo, M3 reproduction |
 | `examples/` | Learning exercise 1 and synthetic fixtures |
 | `.github/workflows/ci.yml` | CI: pytest with Postgres, Terraform checks, container rehearsals |
@@ -112,6 +119,7 @@ Elsewhere:
 | SQL | DuckDB locally, Athena in AWS | Same queries; Glue partition projection; 1 GiB scan cap |
 | Modelling | dbt-core 1.12 with dbt-duckdb | Marts and data tests over the lake |
 | Serving | PostgreSQL 17, FastAPI, Grafana 12 | Read-only API |
+| Orchestration | Apache Airflow 3.3 (standalone, LocalExecutor, SQLite metadata) | Tasks call the `blockpulse` CLI from a separate venv; a one-slot pool guards the data root |
 | Metrics | Prometheus 3.5, prometheus-client | Scrapes the stream sink every 5 s; alert rules for lag, freshness, quarantine, sink down |
 | ML | scikit-learn Isolation Forest | Local append-only registry instead of MLflow |
 | Infrastructure | Terraform (AWS provider 6.x), systemd on Amazon Linux 2023 | No inbound ports, Session Manager, self-expiring |

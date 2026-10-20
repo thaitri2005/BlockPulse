@@ -73,5 +73,5 @@ Tests (`tests/test_stream_lake.py`, `tests/test_metrics.py`):
 ## Limits
 
 - Small files: a 5-second batch per partition makes many small Parquet files under live traffic. Compacting each hour after it closes would fix that; it isn't built yet.
-- One consumer, run by hand. DE6 (Airflow) and DE7 (Kubernetes) are where it would get supervision.
+- One consumer, run by hand. Airflow schedules batch jobs, not long-running consumers ([13](13-airflow.md)); DE7 (Kubernetes) is where it would get supervision.
 - Freshness is measured from the newest event the sink has *seen*, so it can't tell "the feed stopped" from "the sink stopped". `StreamLakeDown` covers the second case.

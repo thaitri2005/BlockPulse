@@ -28,9 +28,10 @@ What the project will not claim:
 | DE3.5 · Serving and storage hardening | Done | Bulk loads 30–52x faster; serving holds all 2.65 M transactions (rebuilt in 10.6 min); raw 10.3 to 2.1 GB; worker survives a broker restart; lint in CI |
 | DE4 · dbt on the lake | Done | 8 models, 28 tests, `dbt build` in 1.5 min on 2.65 M transactions; marts reproduce the shared queries exactly and agree with Postgres on every status ([11](guides/11-dbt.md)) |
 | DE5 · Streaming into the lake, with metrics | Done | `kafka-lake` sink: 13,707 messages to 207,913 transactions and 466,920 events, row-for-row identical to the batch lake; Prometheus metrics, 4 alert rules, Grafana pipeline dashboard ([12](guides/12-streaming-lake-and-metrics.md)) |
-| DE6–DE7 | Staged | See the roadmap |
+| DE6 · Airflow orchestration | Done | DAG per UTC day (screen, lake, load, dbt build) with retries and a one-slot pool; a 3-day backfill equals the direct run row for row in the lake, the marts and Postgres; a Postgres outage recovered by retry; four real failures found and fixed ([13](guides/13-airflow.md)) |
+| DE7 | Staged | See the roadmap |
 
-Tests (2026-10-20): 147 passed and 1 optional skip with the Postgres test database; Terraform 9 of 9 with a mocked provider; Amazon Linux 2023 container rehearsals all pass; CI green.
+Tests (2026-10-20): 154 passed and 2 skips (one Linux-only) with the Postgres test database; Terraform 9 of 9 with a mocked provider; Amazon Linux 2023 container rehearsals all pass; CI green.
 
 ## 3. Roadmap
 
@@ -65,7 +66,7 @@ The audit after DE3 found that the serving layer held 16,770 of 2.65 M rows, loa
 | --- | --- | --- | --- | --- |
 | **DE4 · dbt on the lake** | dbt-duckdb over the lake: staging, intermediate lifecycle, marts, tests, docs and lineage, `dbt build` in CI | `dbt build` green locally and in CI; marts reproduce the shared queries | Laptop | **Done** 2026-10-20 ([11](guides/11-dbt.md)) |
 | **DE5 · One pipeline: streaming into the lake, with metrics** | A Kafka consumer that writes the enriched topic into the same lake tables (hourly files, same contract and quality gate) instead of one Parquet file per message; Prometheus metrics (consumer lag, throughput, error and quarantine rates, data freshness) scraped by Prometheus in the `m2` profile and charted in Grafana; alert rules for lag and freshness | Lake built from the stream equals the lake built from files for the same sessions (row-level check); dashboards show lag and freshness live during a replay | Laptop for build and short replays | **Done** 2026-10-20 ([12](guides/12-streaming-lake-and-metrics.md)) |
-| **DE6 · Airflow orchestration** | A DAG per date partition: process, screen, lake, load, dbt build; retries and SLAs; a demonstrated backfill of past dates; runs in the existing Compose stack | A backfill of 3 past days produces the same lake and marts as the direct run; a deliberately failed task retries and recovers | Laptop | 1–2 sessions |
+| **DE6 · Airflow orchestration** | A DAG per date partition: process, screen, lake, load, dbt build; retries; a demonstrated backfill of past dates; runs in the existing Compose stack | A backfill of 3 past days produces the same lake and marts as the direct run; a deliberately failed task retries and recovers | Laptop | **Done** 2026-10-20 ([13](guides/13-airflow.md)) |
 | **DE7 · Kubernetes** | k3d cluster; a Helm chart for Kafka (Strimzi or Redpanda), Postgres (StatefulSet with a volume), API, Grafana; probes, requests and limits; the drills rerun as pod kills | Chart installs from scratch; pod-kill drills pass with the same invariants as [10](guides/10-failure-drills.md) | Laptop (short); optional k3s-on-EC2 demo on AWS, then destroy | 2–3 sessions |
 
 ### Optional, not scheduled
@@ -82,9 +83,9 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 
 **Next session:**
 
-1. DE6: Airflow over the batch tier: a DAG per date partition (process, screen, lake, load, dbt build), retries, and a backfill of 3 past days compared with the direct run.
-2. DE7: Kubernetes (k3d, Helm) with the drills rerun as pod kills.
-3. Optional, small: hourly compaction of the streamed lake's small files.
+1. DE7: Kubernetes (k3d, Helm) with the drills rerun as pod kills. Ask first: it adds k3d and Helm, and the laptop has 16 GB.
+2. Optional, small: hourly compaction of the streamed lake's small files; incremental dbt models so a daily run rebuilds only its day.
+3. Optional: run the Airflow DAG on the AWS instance instead of the laptop (it sleeps; see [13](guides/13-airflow.md)).
 
 ## 4. Decisions
 
@@ -113,6 +114,8 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 | D24 | dbt models run on DuckDB over the Parquet lake, through a wrapper that sets absolute paths | 2026-10-20: no extra service; views must use absolute paths because DuckDB resolves them when queried |
 | D25 | The stream writes the same lake tables as the batch path, with micro-batches named by partition and first offset, deleted and rewritten on replay, and offsets committed after writing | 2026-10-20: exactly-once output on at-least-once delivery without transactions; a separate `data/lake-stream` lets the two paths be compared row for row |
 | D26 | Metrics go to Prometheus from a per-process registry; labels are table names only | 2026-10-20: low cardinality; alert rules use `for` windows so a catching-up replay doesn't fire |
+| D27 | Airflow orchestrates the CLI; it doesn't contain pipeline logic. BlockPulse runs from its own venv in the Airflow image, metadata is SQLite, the unit of work is one UTC day of capture starts (`process-pending --date`), and a one-slot pool guards the data root | 2026-10-20: one implementation for every runner (D15); Airflow's dependencies never mix with the lock; a pool also covers backfill runs, which `max_active_runs` doesn't |
+| D28 | A processing lock is stale when its process is gone (same host) or it is 3 h old, and SIGTERM exits through cleanup | 2026-10-20: a task killed by Airflow after the laptop slept left its lock and blocked every retry |
 | D23 | Finished raw captures are gzipped in place; all readers accept either form | 2026-10-20: raw was 62% of disk; gzip is 5.4x smaller, stdlib only, byte-identical on read |
 
 ## 5. Risks and limits
@@ -126,6 +129,7 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 | Dependency drift (system numpy changed between two runs before the lock) | Hashed lock, isolated venv, CI lock check; models record library versions |
 | A cloud run keeps billing | Deadline poweroff, budget alert, bucket expiry, teardown checklist ([08](guides/08-aws.md)) |
 | Too many services slow delivery | Compose profiles; stop what isn't in use |
+| The laptop sleeps during long runs (standby froze Docker for 54 min mid-load and Airflow killed the task) | Minute-scale jobs only on the laptop (D21); a killed task no longer blocks its retries (D28) |
 | Postgres incremental loads slow as indexes outgrow its 512 MB container | Hourly loads stay small; backfills use `serving-rebuild` |
 
 ## 6. Resuming work
