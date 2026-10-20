@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import sys
 import time
 from datetime import datetime, timedelta, timezone
@@ -210,3 +211,83 @@ def test_an_interrupted_session_ends_the_loop(tmp_path, monkeypatch):
     result = collector.collect_loop(collector.Layout(tmp_path), session_seconds=60, url="wss://x.invalid/ws",
                                     min_free_gib=0, clock=ticking_clock())  # no session limit, no deadline
     assert result["stop_reason"] == "interrupted" and len(started) == 1
+
+
+def test_process_pending_by_date_in_stages_matches_one_pass(tmp_path, transaction):
+    """The Airflow DAG runs one date in stages (screen, then lake, then load); the result must equal one pass."""
+    pq = pytest.importorskip("pyarrow.parquet")
+    from datetime import date
+    staged = captured_layout(tmp_path / "staged", transaction)
+    first, second = collector.finished_captures(staged)
+    (staged.raw / second).rename(staged.raw / "session-20261016T000000Z")  # a capture from the next day
+    shutil.copytree(staged.root, tmp_path / "one-pass")
+    one_pass = collector.Layout(tmp_path / "one-pass")
+    on = date(2026, 10, 15)
+
+    screened = collector.process_pending(staged, lake=False, on=on, compact=False)
+    assert [s["session"] for s in screened["sessions"]] == [first] and screened["failed"] == []
+    assert (staged.processed / first / "events.jsonl").is_file()  # left uncompressed for the next stage
+    assert not (staged.root / "lake").exists()
+    lake = collector.process_pending(staged, on=on, compact=False)
+    assert [(s["session"], s["processed"], s["lake"]) for s in lake["sessions"]] == [(first, False, True)]
+    assert collector.pending_sessions(staged, on=on) == [] and collector.pending_sessions(staged) == ["session-20261016T000000Z"]
+
+    assert collector.process_pending(one_pass, on=on)["failed"] == []
+    for table in ("transactions", "lifecycle_events", "capture_sessions"):
+        rows = [sorted((str(r) for p in sorted((layout.root / "lake" / table).rglob("*.parquet"))
+                        for r in pq.read_table(p).to_pylist())) for layout in (staged, one_pass)]
+        assert rows[0] == rows[1] and rows[0], table
+
+
+def test_process_pending_refuses_a_date_that_is_still_recording(tmp_path, transaction):
+    from datetime import date
+    layout = captured_layout(tmp_path, transaction, sessions=1)
+    (layout.raw / "session-20261015T230000Z").mkdir()  # started that day, no summary yet
+    with pytest.raises(collector.CollectorError, match="still recording"):
+        collector.process_pending(layout, on=date(2026, 10, 15))
+    assert collector.process_pending(layout, on=date(2026, 10, 14)) == {"sessions": [], "failed": [], "backfill_status_changes": None}
+    assert main(["process-pending", "--root", str(layout.root), "--date", "2026-10-15"]) != 0
+
+
+def test_lock_left_by_a_dead_process_on_this_host_is_taken_over(tmp_path, transaction):
+    """Airflow killed a task whose heartbeat stopped while the laptop slept; its lock must not block the retries."""
+    import socket
+    import subprocess
+    layout = captured_layout(tmp_path, transaction, sessions=1)
+    lock = tmp_path / collector.LOCK_NAME
+    finished = subprocess.run([sys.executable, "-c", "import os; print(os.getpid())"], capture_output=True, text=True)
+    dead_pid = int(finished.stdout)
+    lock.write_text(f"{dead_pid} other-host 2026-10-20T12:03:19Z\n", encoding="utf-8")
+    with pytest.raises(collector.CollectorError, match="another processor"):  # another host: only the age rule
+        collector.process_pending(layout)
+    lock.write_text(f"{os.getpid()} {socket.gethostname()} 2026-10-20T12:03:19Z\n", encoding="utf-8")
+    with pytest.raises(collector.CollectorError, match="another processor"):  # alive: respected
+        collector.process_pending(layout)
+    lock.write_text(f"{dead_pid} {socket.gethostname()} 2026-10-20T12:03:19Z\n", encoding="utf-8")
+    if os.name != "posix":  # no safe liveness probe on Windows: the lock waits for the age rule
+        with pytest.raises(collector.CollectorError, match="another processor"):
+            collector.process_pending(layout)
+        return
+    assert len(collector.process_pending(layout)["sessions"]) == 1 and not lock.exists()
+
+
+@pytest.mark.skipif(os.name != "posix", reason="SIGTERM delivery to a child process is POSIX behaviour")
+def test_sigterm_releases_the_lock(tmp_path):
+    import signal
+    import subprocess
+    script = (
+        "import sys, time\n"
+        "from pathlib import Path\n"
+        "from blockpulse import cli, collector\n"
+        "def hold(argv):\n"
+        "    with collector._Lock(Path(argv[0])):\n"
+        "        print('locked', flush=True)\n"
+        "        time.sleep(60)\n"
+        "cli._main = hold\n"
+        "raise SystemExit(cli.main([sys.argv[1]]))\n"
+    )
+    child = subprocess.Popen([sys.executable, "-c", script, str(tmp_path)], stdout=subprocess.PIPE, text=True)
+    assert child.stdout.readline().strip() == "locked" and (tmp_path / collector.LOCK_NAME).exists()
+    child.send_signal(signal.SIGTERM)
+    assert child.wait(timeout=20) == 128 + signal.SIGTERM
+    assert not (tmp_path / collector.LOCK_NAME).exists()

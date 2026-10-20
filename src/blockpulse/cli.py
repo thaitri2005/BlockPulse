@@ -5,6 +5,7 @@ import asyncio
 import json
 import shutil
 import sys
+from datetime import date
 from pathlib import Path
 
 from blockpulse.detect import detect_features
@@ -30,7 +31,7 @@ def _kafka_call(label, action):
         raise RuntimeError(f"{label} failed: {error}") from error
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="blockpulse", description="Capture Bitcoin mempool observations and replay them locally.")
     commands = parser.add_subparsers(dest="command", required=True)
     capture_parser = commands.add_parser("capture", help="Record a bounded live WebSocket session")
@@ -101,7 +102,8 @@ def main(argv: list[str] | None = None) -> int:
     kafka_parquet.add_argument("--bootstrap-servers", default=DEFAULT_BOOTSTRAP_SERVERS)
     kafka_parquet.add_argument("--max-messages", type=int)
     kafka_parquet.add_argument("--idle-timeout", type=float, default=3.0)
-    commands.add_parser("db-init", help="Apply pending Postgres migrations (uses BLOCKPULSE_DSN or the local default)")
+    db_init = commands.add_parser("db-init", help="Apply pending Postgres migrations (uses BLOCKPULSE_DSN or the local default)")
+    db_init.add_argument("--create-database", action="store_true", help="First create the database if it doesn't exist")
     load_results = commands.add_parser("load-results", help="Load screened.jsonl into Postgres (safe to repeat)")
     load_results.add_argument("source", type=Path, help="A `detect` output directory or its screened.jsonl")
     load_results.add_argument("--run-id", help="Identity of this result set; default is the directory name")
@@ -178,6 +180,10 @@ def main(argv: list[str] | None = None) -> int:
     pending_parser.add_argument("--root", type=Path, default=Path("data"))
     pending_parser.add_argument("--load-db", action="store_true", help="Also load into Postgres (BLOCKPULSE_DSN); safe to repeat")
     pending_parser.add_argument("--no-lake", action="store_true", help="Skip writing the partitioned Parquet lake tables")
+    pending_parser.add_argument("--date", type=date.fromisoformat,
+                                help="Only captures that started on this UTC date (YYYY-MM-DD); refused while one is recording")
+    pending_parser.add_argument("--no-compact", action="store_true",
+                                help="Leave events and raw uncompressed (a later stage of the same session will compact)")
     lake_query = commands.add_parser("lake-query", help="Run SQL over the local Parquet lake with DuckDB (same SQL as Athena)")
     lake_query.add_argument("query", help="A .sql file, or a named query from analytics/queries (e.g. hourly_flag_rate)")
     lake_query.add_argument("--root", type=Path, default=Path("data"))
@@ -213,7 +219,29 @@ def main(argv: list[str] | None = None) -> int:
     drill.add_argument("--admin-dsn", default="postgresql://blockpulse:blockpulse_dev@127.0.0.1:5432/blockpulse",
                        help="Used only to create and drop the separate blockpulse_drill database")
     drill.add_argument("--output", type=Path, default=Path("data/drills"))
-    args = parser.parse_args(argv)
+    return parser
+
+
+def _terminate(signum, frame):
+    raise SystemExit(128 + signum)  # unwind normally, so locks and temporary files are cleaned up
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Run one command. SIGTERM (what Airflow, Docker and Kubernetes send to stop a task) exits through cleanup
+    code instead of killing the process outright; without this a killed task left its processing lock behind."""
+    import signal
+    import threading
+    if threading.current_thread() is not threading.main_thread():
+        return _main(argv)
+    previous = signal.signal(signal.SIGTERM, _terminate)
+    try:
+        return _main(argv)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def _main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
     try:
         if args.command in ("capture", "capture-kafka"):
             from blockpulse.capture import CaptureConfig, capture
@@ -279,8 +307,9 @@ def main(argv: list[str] | None = None) -> int:
             output = None
 
             def run_db_init():
+                created = db.create_database() if args.create_database else False
                 with db.connect() as connection:
-                    return db.apply_migrations(connection)
+                    return {"database_created": created, **db.apply_migrations(connection)}
             summary = _kafka_call("Database initialization", run_db_init)
             code = 0
         elif args.command == "load-results":
@@ -413,7 +442,8 @@ def main(argv: list[str] | None = None) -> int:
                                                  until=until, max_sessions=args.max_sessions, min_free_gib=args.min_free_gib)
                 code = 130 if summary["stop_reason"] == "interrupted" else 0
             elif args.command == "process-pending":
-                summary = collector.process_pending(layout, load_db=args.load_db, lake=not args.no_lake)
+                summary = collector.process_pending(layout, load_db=args.load_db, lake=not args.no_lake, on=args.date,
+                                                     compact=not args.no_compact)
                 code = 0 if not summary["failed"] else 4
             else:
                 summary = collector.sync_pending(layout, bucket=args.bucket, prefix=args.prefix)

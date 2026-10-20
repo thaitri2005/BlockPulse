@@ -21,6 +21,28 @@ def connect(dsn: str | None = None):
     return psycopg.connect(dsn or get_dsn(), connect_timeout=5)
 
 
+def create_database(dsn: str | None = None) -> bool:
+    """Create the DSN's database if it is missing, by connecting to the server's `postgres` database.
+
+    Returns True if it was created. Lets a fresh environment (an orchestrated run, CI) start from an empty server.
+    """
+    import psycopg
+    from psycopg import sql
+    info = psycopg.conninfo.conninfo_to_dict(dsn or get_dsn())
+    name = info.get("dbname")
+    if not name or name == "postgres":
+        raise ValueError("the DSN must name an application database, not the server's postgres database")
+    with psycopg.connect(psycopg.conninfo.make_conninfo(**{**info, "dbname": "postgres"}), connect_timeout=5,
+                         autocommit=True) as connection:  # CREATE DATABASE can't run inside a transaction
+        if connection.execute("SELECT 1 FROM pg_database WHERE datname = %s", (name,)).fetchone():
+            return False
+        try:
+            connection.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(name)))
+        except (psycopg.errors.DuplicateDatabase, psycopg.errors.UniqueViolation):
+            return False  # another process created it between the check and the CREATE (found by two DAG runs)
+        return True
+
+
 def list_migrations(directory: Path = MIGRATIONS_DIR) -> list[tuple[str, str, str]]:
     """Return (version, sql, sha256) in filename order, e.g. ('001_initial', ...)."""
     found = []

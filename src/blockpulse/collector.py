@@ -15,12 +15,14 @@ import csv
 import gzip
 import json
 import os
+import re
 import shlex
 import shutil
+import socket
 import subprocess
 import time
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from websockets.asyncio.client import connect
@@ -141,13 +143,35 @@ def finished_captures(layout: Layout) -> list[str]:
                   if p.is_dir() and p.name.startswith(SESSION_PREFIX) and ".partial-" not in p.name and _complete(p))
 
 
-def pending_sessions(layout: Layout, *, load_db: bool = False, lake: bool = True) -> list[str]:
-    """Finished captures missing a stage: screening, the lake tables, or (when loading) the Postgres load."""
+_SESSION_START = re.compile(r"(\d{8})T\d{6}Z$")
+
+
+def session_date(name: str) -> date | None:
+    """The UTC date a session started, from the timestamp at the end of its name (session-...-YYYYMMDDTHHMMSSZ)."""
+    match = _SESSION_START.search(name)
+    return datetime.strptime(match.group(1), "%Y%m%d").date() if match else None
+
+
+def unfinished_captures(layout: Layout, on: date) -> list[str]:
+    """Captures that started on this date and are still recording (or crashed before writing a summary)."""
+    if not layout.raw.is_dir():
+        return []
+    return sorted(p.name for p in layout.raw.iterdir()
+                  if p.is_dir() and p.name.startswith(SESSION_PREFIX) and ".partial-" not in p.name
+                  and not _complete(p) and session_date(p.name) == on)
+
+
+def pending_sessions(layout: Layout, *, load_db: bool = False, lake: bool = True, on: date | None = None) -> list[str]:
+    """Finished captures missing a stage: screening, the lake tables, or (when loading) the Postgres load.
+
+    With `on`, only captures that started on that UTC date: the unit an orchestrator schedules and backfills.
+    """
     from blockpulse.lake import report_path
     return [name for name in finished_captures(layout)
-            if not _complete(layout.screened / name)
-            or (lake and not report_path(layout.root, name).is_file())
-            or (load_db and not (layout.screened / name / LOADED_MARKER).exists())]
+            if (on is None or session_date(name) == on) and (
+                not _complete(layout.screened / name)
+                or (lake and not report_path(layout.root, name).is_file())
+                or (load_db and not (layout.screened / name / LOADED_MARKER).exists()))]
 
 
 def _compact_events(processed: Path) -> bool:
@@ -230,8 +254,25 @@ def process_session(layout: Layout, name: str, *, load_db: bool = False, dsn: st
     return done
 
 
+def _process_exists(pid: int) -> bool:
+    if os.name != "posix":
+        return True  # Windows has no harmless signal-0 probe (os.kill would end the process); rely on the age rule
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
 class _Lock:
-    """One processor at a time per data root. A lock older than three hours is treated as left behind by a crash."""
+    """One processor at a time per data root.
+
+    A lock is stale, and taken over, when it is older than three hours or when it was written on this host by a
+    process that no longer exists. The second rule matters under a scheduler: Airflow killed a load whose heartbeat
+    stopped while the laptop slept, the lock stayed behind, and every retry was refused until the three hours passed.
+    """
 
     def __init__(self, root: Path):
         self.path = root / LOCK_NAME
@@ -241,30 +282,51 @@ class _Lock:
         for _ in range(2):
             try:
                 handle = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(handle, f"{os.getpid()} {utc_now().isoformat()}\n".encode())
+                os.write(handle, f"{os.getpid()} {socket.gethostname()} {utc_now().isoformat()}\n".encode())
                 os.close(handle)
                 return self
             except FileExistsError:
-                if time.time() - self.path.stat().st_mtime < STALE_LOCK_SECONDS:
+                if not self._stale():
                     raise CollectorError(f"another processor holds {self.path}")
                 self.path.unlink(missing_ok=True)
         raise CollectorError(f"could not take {self.path}")
+
+    def _stale(self) -> bool:
+        try:
+            age = time.time() - self.path.stat().st_mtime
+            fields = self.path.read_text(encoding="utf-8").split()
+        except FileNotFoundError:
+            return True
+        if age >= STALE_LOCK_SECONDS:
+            return True
+        # "<pid> <host> <time>"; locks written before 2026-10-20 have no host and fall back to the age rule.
+        if len(fields) >= 3 and fields[0].isdigit() and fields[1] == socket.gethostname():
+            return not _process_exists(int(fields[0]))
+        return False
 
     def __exit__(self, *args):
         self.path.unlink(missing_ok=True)
 
 
-def process_pending(layout: Layout, *, load_db: bool = False, dsn: str | None = None, lake: bool = True) -> dict:
-    """Process every pending session. One failure is recorded and does not stop the others."""
+def process_pending(layout: Layout, *, load_db: bool = False, dsn: str | None = None, lake: bool = True,
+                    on: date | None = None, compact: bool = True) -> dict:
+    """Process every pending session (or those that started on one date). One failure doesn't stop the others.
+
+    A date whose captures are still recording is refused, so a scheduled run never processes half a day.
+    """
     results, failed = [], []
     with _Lock(layout.root):
-        pending = pending_sessions(layout, load_db=load_db, lake=lake)
+        if on is not None and (recording := unfinished_captures(layout, on)):
+            raise CollectorError(f"{len(recording)} capture(s) from {on} have no summary yet (still recording?): "
+                                 f"{', '.join(recording[:3])}")
+        pending = pending_sessions(layout, load_db=load_db, lake=lake, on=on)
         # Several sessions to load is a backfill: load them all, then project lifecycle status once, instead of
         # rescanning the growing events table after every session.
         backfill = load_db and len(pending) > 1
         for name in pending:
             try:
-                results.append(process_session(layout, name, load_db=load_db, dsn=dsn, lake=lake, project=not backfill))
+                results.append(process_session(layout, name, load_db=load_db, dsn=dsn, lake=lake, project=not backfill,
+                                               compact=compact))
             except Exception as error:  # keep going; the failure is reported and retried next time
                 failed.append({"session": name, "error": f"{type(error).__name__}: {error}"})
         status_changes = None
