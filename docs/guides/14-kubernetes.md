@@ -159,4 +159,4 @@ Inside a sandboxed container (a cloud development session, some CI runners) thre
 - Passwords in `values.yaml` are development defaults, as in Compose.
 - Airflow is not in the chart, and there is no ingress. Compaction and the serving rebuild are run by hand with `kubectl exec`, not on a schedule.
 - Prometheus keeps its data in the pod; replacing the pod loses the history.
-- Run only on generated traffic, in a cloud session and in CI (one drill per push): not yet on the laptop or on recorded sessions.
+- Run only on generated traffic, in a cloud session and in CI (the worker drill on every push, on a plain Linux runner with none of the restricted-host fixes): not yet on Windows with Docker Desktop, or on recorded sessions.

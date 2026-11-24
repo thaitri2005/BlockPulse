@@ -32,7 +32,7 @@ The roadmap (milestones M0–M3 and steps DE1–DE7) is complete.
 | Airflow orchestration | Done | [13](guides/13-airflow.md) |
 | Kubernetes: cluster, Helm chart for the whole streaming and serving path, pod-kill drills | Done on generated traffic, in a cloud session and in CI. Open: a run on the laptop | [14](guides/14-kubernetes.md) |
 
-Checks on 2026-11-24 (Linux, Python 3.12): 190 tests passed and 1 skipped; ruff, shellcheck and `helm lint --strict` clean. On Windows without `helm` the 14 chart tests skip.
+Checks on 2026-11-24 (Linux, Python 3.12): 190 tests passed and 1 skipped; ruff, shellcheck and `helm lint --strict` clean; CI green on `main`, including the Kubernetes job (cluster, image build, chart install, worker drill) in 4.5 min. On Windows without `helm` the 14 chart tests skip.
 
 ## 3. What could come next
 
@@ -40,7 +40,7 @@ Nothing is scheduled. Candidates, roughly by value for learning:
 
 | Item | Why | Runs on |
 | --- | --- | --- |
-| Run the Kubernetes quick start and drills on the laptop | The image and scripts have only run behind a cloud session's proxy | Laptop |
+| Run the Kubernetes quick start and drills on the laptop | They pass on a plain Linux runner in CI and in a cloud session, but have not run on Windows with Docker Desktop | Laptop |
 | Schedule `lake-compact` and time it, and `serving-rebuild --lake`, on recorded traffic | Both exist and are tested on fixtures only | Laptop |
 | A continuous load from the stream into Postgres | Serving from the streamed lake is a full rebuild | Laptop |
 | Schedule compaction and the serving rebuild in the cluster (a CronJob) | They are run by hand with `kubectl exec` | Cloud session or laptop |

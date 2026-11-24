@@ -175,9 +175,13 @@ Added so the whole streaming path runs in the cluster. Data: 20,000 generated me
 
 **A defect in the generator, found while writing exercise 19.** `synth-capture` wrote a summary without `started_at`, `elapsed_seconds`, `stop_reason` and `connection_errors`, so the lake quarantined each generated session's `capture_sessions` row and a plain `dbt build` failed on generated data. The drills had not noticed because they never read that table. The generator now writes the same fields as a recorded capture, and a test runs a generated session through the batch path with nothing quarantined.
 
+## First CI run with the Kubernetes job
+
+CI run 18 on `main` (commit `f6303a6`): all four jobs passed. The Kubernetes job took 4 min 35 s on a GitHub-hosted Ubuntu 24.04 runner: install the locked dependencies, install k3d, create the cluster, build and load the image, run `drill k8s-enrich-kill`. That runner has no TLS-inspecting proxy and allows `oom_score_adj` writes, so this is also the first run of the scripts and the image build on an unrestricted host.
+
 ## What DE7 did not cover
 
 - Each drill ran twice, in the cloud session, on synthetic traffic. Nothing here was run on the laptop or on recorded sessions.
 - CI creates a cluster and runs the worker drill on every push; the broker and Postgres drills run only by hand.
-- The image was built only behind the session's proxy.
+- Nothing has run on Windows with Docker Desktop, which is the laptop's setup.
 - Airflow is still Compose-only.
