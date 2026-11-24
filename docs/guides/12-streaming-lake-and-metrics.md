@@ -28,6 +28,23 @@ What it doesn't do:
 - The `session` column holds the run id, because the stream doesn't know capture folder names.
 - "First observation of a txid per run wins" is kept in memory, so a restart in the middle of a run could write a second row for a transaction that is announced again later in that run. `fct_transactions` in dbt keeps the first observation either way.
 
+The order of operations is what makes a crash harmless. Offsets are committed only after the files exist, and a batch's files are named after its first offset, so a batch that is read twice replaces its own files:
+
+```mermaid
+sequenceDiagram
+    participant K as Kafka (enriched topic)
+    participant S as Stream sink
+    participant L as Lake files
+    K->>S: messages from offset 500
+    S->>L: delete any files that start in this offset range
+    S->>L: write stream-p0-o500.parquet and its quality report
+    S->>K: commit offset 525
+    Note over S: crash here, before the next commit
+    K->>S: messages from offset 525 again
+    S->>L: delete stream-p0-o525.parquet if it exists, then write it again
+    S->>K: commit offset 550
+```
+
 ## Metrics (`metrics.py`)
 
 | Question | Metric | Type |
@@ -41,6 +58,10 @@ The only label is the table name. Transaction ids or error strings never become 
 
 Prometheus (`observability/prometheus/prometheus.yml`) scrapes `host.docker.internal:9108` every 5 s, because the sink runs on the host and Prometheus runs in Compose. The Grafana dashboard **BlockPulse pipeline health** shows whether the sink is up, lag, freshness, quarantined rows, throughput, rows per second by table, and batch-flush time (p50/p95).
 
+![The pipeline dashboard after a replay of two live captures, 2026-11-24](../images/grafana-pipeline.png)
+
+*The pipeline dashboard in the Kubernetes deployment after two live captures were replayed. Newest event age is red because the replay happened about half an hour after the capture.*
+
 ### Alert rules (`observability/prometheus/alerts.yml`)
 
 | Alert | Condition | For |
@@ -51,6 +72,10 @@ Prometheus (`observability/prometheus/prometheus.yml`) scrapes `host.docker.inte
 | `RowsQuarantined` | any quarantined row in the last 10 min | immediately |
 
 The `for` clause is what keeps an alert from paging on a blip. A rule whose condition is true sits in *pending* and only *fires* if the condition stays true for the whole window. `promtool check rules` validates the file.
+
+![Prometheus alert rules: three inactive, DataStale pending](../images/prometheus-alerts.png)
+
+*The four rules in Prometheus during that replay. `DataStale` is pending, not firing: the condition is true but has not yet held for the rule's `for` window.*
 
 ## Results (2026-10-20, 6 recorded sessions replayed through Kafka)
 
@@ -91,7 +116,7 @@ Both are covered by tests (`tests/test_lake_compact.py`, `tests/test_serving.py`
 
 ## Limits
 
-- Compaction is a command, not a schedule: nothing runs it hourly yet.
+- Compaction is scheduled only in the Kubernetes deployment (an hourly CronJob, [14](14-kubernetes.md)); under Compose it is a command you run.
 - Serving from the streamed lake is a full rebuild, not a continuous load, so Postgres is as fresh as the last rebuild.
-- One consumer, run by hand. Airflow schedules batch jobs, not long-running consumers ([13](13-airflow.md)); DE7 (Kubernetes) is where it would get supervision.
+- Under Compose the sink is one consumer run by hand; Airflow schedules batch jobs, not long-running consumers ([13](13-airflow.md)). In the Kubernetes deployment it is a StatefulSet that is restarted if it stops ([14](14-kubernetes.md)).
 - Freshness is measured from the newest event the sink has *seen*, so it can't tell "the feed stopped" from "the sink stopped". `StreamLakeDown` covers the second case.

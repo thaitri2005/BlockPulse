@@ -37,6 +37,12 @@ Both sessions went through the batch path (`process-pending`) and through the st
 
 The comparison script is [`reports/live-2026-11-24/compare.py`](reports/live-2026-11-24/compare.py): for each table it counts the rows of each lake that are not in the other (`EXCEPT ALL` in both directions).
 
+## 3. The same captures in the Kubernetes deployment, for the screenshots
+
+The chart was installed from nothing (29 s), the two capture folders were copied into the sink's volume, and both were replayed from inside the cluster: 57 and 446 messages, both consumer groups at lag 0, then `serving-rebuild --lake` in the sink's pod (3,344 scores, 10,392 events, 8,076 transactions, 106 flagged, 3.3 s). The API's `/pipeline/status` reported the same counts as section 2: 6,950 confirmed, 1,083 observed unconfirmed, 38 superseded, 5 removed.
+
+`docs/images/grafana-overview.png`, `grafana-pipeline.png` and `prometheus-alerts.png` were taken from that deployment at about 13:41 UTC. The capture ended at 13:07, so "newest event age" reads about 35 minutes and `DataStale` is pending. `docs/images/model-vs-gate.png` is drawn from the figures in guide 06; its source is `docs/images/model-vs-gate.html`.
+
 ## Limits
 
 - Ten minutes of traffic, not a day. The closed hour held about 300 transactions; the 30-files-to-1 compaction measured on generated traffic in the cluster ([DE7 report](2026-11-24-de7-kubernetes.md)) is the larger case.

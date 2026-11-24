@@ -14,6 +14,10 @@ Postgres --> read-only API (blockpulse serve)      Postgres --> Grafana dashboar
 
 The files remain the source of truth, and the lake is the analytics store. Postgres is the **serving copy** behind the API and dashboard: it holds all the data (2.65 M scores, 5.86 M lifecycle events, 2.82 M transactions as of 2026-10-20) and can always be rebuilt.
 
+![The overview dashboard on two live captures, 2026-11-24](../images/grafana-overview.png)
+
+*The overview dashboard in the Kubernetes deployment, on two live captures recorded on 2026-11-24 (3,344 scored transactions, 106 flagged).*
+
 ## Two ways data gets in
 
 | Path | When | How | Measured |

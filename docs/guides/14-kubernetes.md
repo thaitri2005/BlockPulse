@@ -109,6 +109,19 @@ The two maintenance commands run inside the sink's pod because that is where the
 
 Same invariant as guide 10: after a crash, nothing is lost and every input is represented exactly once where it matters. What changes is who recovers. In Compose the drill restarts what it killed. Here it only deletes a pod (`--grace-period=0 --force`, so SIGKILL and no clean shutdown); a controller replaces it, and the drill waits and checks.
 
+```mermaid
+sequenceDiagram
+    participant D as Drill (on your machine)
+    participant C as Controller (Deployment / StatefulSet / Job)
+    participant P as Pod
+    D->>P: wait until the work is mid-way (offsets committed, or a transaction open)
+    D->>P: kubectl delete pod --grace-period=0 --force
+    Note over P: SIGKILL, no clean shutdown
+    C->>P: notices the pod is missing, creates a replacement on the same volume
+    P->>P: resumes from committed offsets, or retries the load
+    D->>P: wait for lag 0 or Job complete, then check the invariants
+```
+
 Each drill installs the chart into its own namespace, `blockpulse-drill`, so topics and tables start empty, and deletes the namespace afterwards (`--keep` leaves it). Traffic is generated inside the cluster with `blockpulse synth-capture`, a deterministic generator of capture sessions labelled `source_mode: synthetic`. The worker's REST fallback points at an unreachable address, so nothing calls the public API. Kills are triggered by a condition, not a timer: the consumer group has committed some offsets but not all, or Postgres reports an open transaction from the loader.
 
 ### Results (2026-11-24, two runs of each)
@@ -161,4 +174,4 @@ Inside a sandboxed container (a cloud development session, some CI runners) thre
 - Airflow is not in the chart, and there is no ingress.
 - The maintenance CronJob mounts the sink's ReadWriteOnce volume, which works because it is scheduled onto the sink's node. The scheduled serving rebuild is off by default because it replaces what Postgres serves with the streamed data only.
 - Prometheus keeps its data in the pod; replacing the pod loses the history.
-- Run only on generated traffic, in a cloud session and in CI (the worker drill on every push, on a plain Linux runner with none of the restricted-host fixes): not yet on Windows with Docker Desktop, or on recorded sessions.
+- The drills use generated traffic, in a cloud session and in CI (the worker drill on every push, on a plain Linux runner with none of the restricted-host fixes). Recorded traffic has gone through the deployment once: two live captures, 503 messages ([report](../experiments/2026-11-24-live-capture-and-stream-path.md)). Nothing has run on Windows with Docker Desktop.

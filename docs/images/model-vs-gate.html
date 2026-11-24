@@ -1,0 +1,36 @@
+<!doctype html>
+<!-- Source of docs/images/model-vs-gate.png. Figures are from docs/guides/06-ml-evaluation.md (2026-10-14 and 2026-10-19). -->
+<html><head><meta charset="utf-8"><title>Model against the promotion gate</title>
+<style>
+  .viz-root { --surface-1:#fcfcfb; --text-primary:#0b0b0b; --text-secondary:#52514e; --grid:#e6e5e0; --series-1:#2a78d6; --series-2:#eb6834;
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif; background:var(--surface-1); color:var(--text-primary); width:900px; padding:24px 28px 20px; box-sizing:border-box; }
+  body { margin:0; background:#fcfcfb; }
+  h1 { font-size:18px; margin:0 0 4px; font-weight:600; }
+  p.sub { margin:0 0 14px; color:var(--text-secondary); font-size:13px; }
+  .legend { display:flex; gap:18px; font-size:13px; color:var(--text-secondary); margin-bottom:10px; }
+  .legend i { display:inline-block; width:12px; height:12px; border-radius:3px; margin-right:6px; vertical-align:-1px; }
+  .row { display:grid; grid-template-columns:230px 1fr; align-items:center; margin:14px 0; }
+  .name { font-size:14px; } .name small { display:block; color:var(--text-secondary); font-size:12px; margin-top:2px; }
+  .plot { position:relative; height:54px; border-left:1px solid var(--text-secondary); background-image:linear-gradient(to right, var(--grid) 1px, transparent 1px); background-size:25% 100%; }
+  .bar { position:absolute; left:0; height:18px; border-radius:0 4px 4px 0; }
+  .bar.a { top:6px; background:var(--series-1); } .bar.b { top:28px; background:var(--series-2); }
+  .val { position:absolute; font-size:12px; color:var(--text-primary); line-height:18px; padding-left:6px; white-space:nowrap; }
+  .gate { position:absolute; top:-4px; bottom:-4px; width:0; border-left:2px dashed var(--text-primary); }
+  .gate span { position:absolute; top:-17px; left:-2px; transform:translateX(-50%); font-size:11px; color:var(--text-secondary); white-space:nowrap; }
+  .axis { display:grid; grid-template-columns:230px 1fr; font-size:11px; color:var(--text-secondary); }
+  .ticks { display:flex; justify-content:space-between; }
+  p.note { color:var(--text-secondary); font-size:12px; margin:14px 0 0; line-height:1.45; }
+</style></head>
+<body><div class="viz-root">
+  <h1>The model against the promotion gate, on synthetic patterns with known shapes</h1>
+  <p class="sub">Share of synthetic cases the Isolation Forest flags. Dashed lines are the gate's limits. These are not accuracy figures: there are no labels.</p>
+  <div class="legend"><span><i style="background:var(--series-1)"></i>First run, 15,515 rows (14 Oct)</span><span><i style="background:var(--series-2)"></i>Rerun, 2.65 million rows (19 Oct)</span></div>
+  <div class="row"><div class="name">Benign controls flagged<small>ordinary shapes; lower is better</small></div>
+    <div class="plot"><div class="bar a" style="width:43%"></div><div class="val" style="left:43%;top:6px">43%</div><div class="bar b" style="width:5.6%"></div><div class="val" style="left:5.6%;top:28px">5.6%</div></div></div>
+  <div class="row"><div class="name">Worst benign family flagged<small>large payments; must be at most 10%</small></div>
+    <div class="plot"><div class="bar a" style="width:97.5%"></div><div class="val" style="left:calc(97.5% - 52px);top:6px;color:#fff">97.5%</div><div class="bar b" style="width:12.5%"></div><div class="val" style="left:12.5%;top:28px">12.5%, fails</div><div class="gate" style="left:10%"><span>limit 10%</span></div></div></div>
+  <div class="row"><div class="name">Rule-targeted patterns flagged<small>must be at least 90%</small></div>
+    <div class="plot"><div class="bar a" style="width:82.6%"></div><div class="val" style="left:calc(82.6% - 52px);top:6px;color:#fff">82.6%</div><div class="bar b" style="width:82.4%"></div><div class="val" style="left:calc(82.4% - 92px);top:28px;color:#fff">82.4%, fails</div><div class="gate" style="left:90%"><span>needs 90%</span></div></div></div>
+  <div class="axis"><div></div><div class="ticks"><span>0%</span><span>25%</span><span>50%</span><span>75%</span><span>100%</span></div></div>
+  <p class="note">More data fixed most of the over-flagging of ordinary transactions, but the model still fails two of the four gate criteria, so the rules remain the champion detector. Source: guide 06, ML evaluation.</p>
+</div></body></html>

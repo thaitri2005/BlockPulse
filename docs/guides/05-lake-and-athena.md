@@ -80,5 +80,5 @@ Open the Athena console, choose the `blockpulse-lake` workgroup and the `blockpu
 
 - The lake is rebuilt per session, not per row; editing one row means rebuilding its session (which is cheap and idempotent).
 - Partitions follow UTC receive time, so a session that crosses an hour boundary writes two files.
-- The Glue tables, workgroup and saved queries are tested with a mocked provider and validated by Terraform, but have not yet run against real Athena.
+- The Glue tables, workgroup and saved queries are tested with a mocked provider on every push. They ran against real Athena once, during the AWS collection ([08](08-aws.md#what-has-and-hasnt-been-verified)); that stack is torn down, so they cannot be rerun without redeploying it.
 - `lifecycle_events` stores no transaction payloads; the raw JSONL keeps them.

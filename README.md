@@ -128,7 +128,31 @@ flowchart TB
 | A **lifecycle status** | The strongest evidence seen for a transaction: observed unconfirmed, superseded (replaced), confirmed (mined), or removed for an unknown reason | The network's full view. This is one public provider's feed, and gaps are a lower bound |
 | A **quarantined row** | A row that failed the lake contract, kept with its reason | Lost data. The raw message is still there |
 
+A transaction's status is a projection of every event seen for it. The newest event decides, and at an identical time the stronger kind wins, so loading old events late can never roll a status backwards:
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> observed_unconfirmed: added
+    observed_unconfirmed --> confirmed: mined
+    observed_unconfirmed --> superseded: replaced
+    observed_unconfirmed --> removed_unknown_reason: removed
+    removed_unknown_reason --> confirmed: mined later
+```
+
 Public blockchain data can be linked to people. Results describe patterns of transactions, never the owners of addresses.
+
+## What it looks like
+
+Both screenshots are from the Kubernetes deployment on 2026-11-24, showing two live captures of the public feed (ten minutes, 8,076 transactions) after they were replayed through Kafka, the enrichment worker and the stream sink.
+
+**Data dashboard (Grafana over Postgres).** 3,344 transactions were newly seen and scored, 106 of them flagged by a rule; the other transactions in the 8,076 only appeared in lifecycle events, mostly a block being mined.
+
+![Grafana overview dashboard: scored transactions, flags by rule, lifecycle status and the latest flagged rows](docs/images/grafana-overview.png)
+
+**Pipeline health (Grafana over Prometheus).** The stream sink is up, has no lag and quarantined nothing. "Newest event age" is red on purpose: the capture was replayed about half an hour after it was recorded, which is exactly what that panel exists to show.
+
+![Grafana pipeline dashboard: sink up, consumer lag 0, newest event age, rows written per second](docs/images/grafana-pipeline.png)
 
 ## Results
 
@@ -149,6 +173,8 @@ Measured on recorded mempool traffic unless stated. Each row links to the guide 
 The Kubernetes drills use generated traffic (30,000 messages; 200,000 rows), because the recorded dataset is local and not in this repository. Each drill passed in two logged runs; their counts are never compared with the recorded ones.
 
 The last row is a result, not a failure: the evaluation exists to decide honestly, and a model that flags 12.5% of ordinary large payments is not an improvement.
+
+![Bar chart of the model against the promotion gate: benign controls flagged fell from 43% to 5.6% with more data, but the worst benign family is at 12.5% against a 10% limit and rule-targeted patterns at 82.4% against a 90% requirement](docs/images/model-vs-gate.png)
 
 ## Limits
 
