@@ -191,7 +191,8 @@ def test_prometheus_scrapes_the_sink_under_the_job_name_the_alerts_use():
     docs = _render()
     config = _one(docs, "ConfigMap", "bp-prometheus")["data"]
     scrape = yaml.safe_load(config["prometheus.yml"])["scrape_configs"]
-    assert scrape == [{"job_name": "blockpulse-stream-lake", "static_configs": [{"targets": ["bp-sink-0.bp-sink:9108"]}]}]
+    assert scrape == [{"job_name": "blockpulse-stream-lake", "static_configs": [{"targets": ["bp-sink-0.bp-sink:9108"]}]},
+                      {"job_name": "blockpulse-enrich", "static_configs": [{"targets": ["bp-worker:9109"]}]}]
     # The alert rules are a copy of the ones Compose mounts; they refer to that job name.
     source = REPO / "observability" / "prometheus" / "alerts.yml"
     copy = CHART / "files" / "prometheus" / "alerts.yml"
@@ -232,3 +233,15 @@ def test_maintenance_cronjob_compacts_next_to_the_sink_and_only_rebuilds_serving
 
     without_sink = _render("--set", "sink.replicas=0")
     assert not [d for d in without_sink if d["kind"] == "CronJob"]
+
+
+def test_worker_exposes_metrics_and_is_health_checked_through_them():
+    """The worker serves no API, so its metrics endpoint is both what Prometheus scrapes (for the lag alert) and
+    what the kubelet probes to restart a process that has stopped answering."""
+    docs = _render("--set", "worker.replicas=1")
+    (container,) = _pod_spec(_one(docs, "Deployment", "bp-worker"))["containers"]
+    assert "--metrics-port=9109" in container["args"]
+    assert container["livenessProbe"]["httpGet"] == {"path": "/metrics", "port": "metrics"}
+    service = _one(docs, "Service", "bp-worker")
+    assert service["spec"]["ports"] == [{"name": "metrics", "port": 9109}]
+    assert service["spec"]["selector"]["app.kubernetes.io/component"] == "worker"

@@ -1,4 +1,4 @@
-"""Prometheus metrics for the streaming lake sink.
+"""Prometheus metrics for the streaming lake sink and the enrichment worker.
 
 Four questions an operator asks, each answered by a metric Prometheus scrapes from `/metrics`:
 
@@ -69,3 +69,30 @@ class StreamLakeMetrics:
             lag = _consumer_lag(consumer)
             if lag is not None:
                 self.lag.set(lag)
+
+
+class EnrichmentMetrics:
+    """Metrics for the enrichment worker. It shares the lag and message metric names with the sink, so one alert
+    rule (`blockpulse_consumer_lag_messages`) covers both; Prometheus tells them apart by the scrape job."""
+
+    def __init__(self, port: int | None = None, *, registry=None):
+        from prometheus_client import CollectorRegistry, Counter, Gauge, start_http_server
+        self.registry = registry or CollectorRegistry()
+        self.messages = Counter("blockpulse_messages_consumed_total", "Raw messages read from Kafka", registry=self.registry)
+        self.requests = Counter("blockpulse_enrichment_requests_total", "REST requests made to fill in missing inputs",
+                                registry=self.registry)
+        self.errors = Counter("blockpulse_enrichment_errors_total", "Records sent to the errors topic", registry=self.registry)
+        self.lag = Gauge("blockpulse_consumer_lag_messages", "Messages behind the end of the raw topic", registry=self.registry)
+        if port:
+            start_http_server(port, registry=self.registry)
+
+    def message_processed(self, requests: int, errors: int) -> None:
+        self.messages.inc()
+        self.requests.inc(requests)
+        self.errors.inc(errors)
+
+    def checkpointed(self, consumer) -> None:
+        from blockpulse.kafka_workers import _consumer_lag
+        lag = _consumer_lag(consumer)
+        if lag is not None:
+            self.lag.set(lag)

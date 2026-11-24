@@ -128,7 +128,7 @@ Python package `src/blockpulse/` (about 6,200 lines, flat on purpose):
 | `kafka_pipeline.py`, `kafka_workers.py` | 571 | Topics, publisher, replay, archive consumer, enrichment consumer (batched checkpoints) |
 | `stream_lake.py` | 216 | Enriched topic to lake tables in offset-named micro-batches, through the quality gate (`kafka-lake`) |
 | `lake_compact.py` | 80 | Merge the streamed lake's small files, one per closed hour (`lake-compact`) |
-| `metrics.py` | 71 | Prometheus metrics for the stream sink: lag, freshness, throughput, quarantines |
+| `metrics.py` | 98 | Prometheus metrics for the stream sink and the enrichment worker: lag, freshness, throughput, quarantines, requests |
 | `enrichment.py`, `parquet_archive.py` | 370 | Rate-limited REST enrichment; Kafka-to-Parquet archive |
 | `db.py`, `results.py`, `lifecycle.py` + `migrations/` | 303 | Postgres migrations; bulk (`COPY` + set-based merge) duplicate-safe loads; lifecycle status projection |
 | `warehouse.py` | 46 | Runs the dbt project with absolute paths (`dbt`) |
@@ -148,7 +148,7 @@ Elsewhere:
 
 | Path | What it is |
 | --- | --- |
-| `tests/` | pytest (193 tests); Postgres tests opt in with `BLOCKPULSE_TEST_DSN`; Helm chart tests need `helm`; the Kubernetes drill logic is tested with `kubectl` faked |
+| `tests/` | pytest (196 tests); Postgres tests opt in with `BLOCKPULSE_TEST_DSN`; Helm chart tests need `helm`; the Kubernetes drill logic is tested with `kubectl` faked |
 | `analytics/queries/` | Shared SQL, run by DuckDB locally and saved as Athena named queries |
 | `analytics/dbt/` | dbt project: staging, intermediate and mart models with tests, over the lake |
 | `orchestration/airflow/` | Airflow image (BlockPulse in its own venv) and the `blockpulse_daily` DAG |
@@ -193,3 +193,4 @@ Elsewhere:
 - Kubernetes has run only on generated traffic: in a cloud session, and in CI, which creates a cluster and runs one pod-kill drill on every push.
 - The dataset is final (2.65 million transactions; decision D32). Results on it will not be extended by further collection.
 - `cli.py` dispatches every command from one long function. It works and is tested, but it is the first thing to restructure if commands keep being added.
+- A design review on 2026-11-24 fixed two weaknesses in place and recorded why the others stay ([report](experiments/2026-11-24-design-review.md)).

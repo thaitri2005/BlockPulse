@@ -32,7 +32,7 @@ What the project will not claim:
 | Airflow orchestration | Done | [13](guides/13-airflow.md) |
 | Kubernetes: cluster, Helm chart for the whole streaming and serving path, scheduled lake upkeep, pod-kill drills | Done on generated traffic, in a cloud session and in CI | [14](guides/14-kubernetes.md) |
 
-Checks on 2026-11-24 (Linux, Python 3.12): 192 tests passed and 1 skipped; ruff, shellcheck and `helm lint --strict` clean; CI green on `main`, including the Kubernetes job (cluster, image build, chart install, worker drill) in 4.5 min. On Windows without `helm` the 14 chart tests skip.
+Checks on 2026-11-24 (Linux, Python 3.12): 195 tests passed and 1 skipped; ruff, shellcheck and `helm lint --strict` clean; CI green on `main`, including the Kubernetes job (cluster, image build, chart install, worker drill) in 4.5 min. On Windows without `helm` the 14 chart tests skip.
 
 ## 3. What is left
 

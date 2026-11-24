@@ -1,4 +1,4 @@
-# Alert rules for the streaming lake sink. They fire in Prometheus (Status > Alerts); no notifications are wired up.
+# Alert rules for the streaming lake sink and the enrichment worker (the lag rule covers both jobs). They fire in Prometheus (Status > Alerts); no notifications are wired up.
 groups:
   - name: blockpulse
     rules:

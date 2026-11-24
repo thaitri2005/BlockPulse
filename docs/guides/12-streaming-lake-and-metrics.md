@@ -60,6 +60,10 @@ Prometheus (`observability/prometheus/prometheus.yml`) scrapes `host.docker.inte
 
 *The pipeline dashboard in the Kubernetes deployment after two live captures were replayed. Newest event age is red because the replay happened a few hours after the capture, which is what that tile exists to show.*
 
+### The enrichment worker's metrics
+
+`kafka-enrich --metrics-port 9109` exposes the worker's own numbers: `blockpulse_messages_consumed_total`, `blockpulse_enrichment_requests_total`, `blockpulse_enrichment_errors_total` and `blockpulse_consumer_lag_messages`. The lag and message metrics share their names with the sink's on purpose. Prometheus adds a `job` label when it scrapes (`blockpulse-enrich` or `blockpulse-stream-lake`), so one alert rule and one chart cover both consumers, and a query can still pick one with `{job="..."}`.
+
 ### Alert rules (`observability/prometheus/alerts.yml`)
 
 | Alert | Condition | For |
@@ -116,5 +120,6 @@ Both are covered by tests (`tests/test_lake_compact.py`, `tests/test_serving.py`
 
 - Compaction is scheduled only in the Kubernetes deployment (an hourly CronJob, [14](14-kubernetes.md)); under Compose it is a command you run.
 - Serving from the streamed lake is a full rebuild, not a continuous load, so Postgres is as fresh as the last rebuild.
+- The sink remembers only recent message and transaction ids (200,000 messages, 8 capture runs), so its memory stays bounded; a duplicate older than that window would be written again and removed by `fct_transactions`.
 - Under Compose the sink is one consumer run by hand; Airflow schedules batch jobs, not long-running consumers ([13](13-airflow.md)). In the Kubernetes deployment it is a StatefulSet that is restarted if it stops ([14](14-kubernetes.md)).
 - Freshness is measured from the newest event the sink has *seen*, so it can't tell "the feed stopped" from "the sink stopped". `StreamLakeDown` covers the second case.

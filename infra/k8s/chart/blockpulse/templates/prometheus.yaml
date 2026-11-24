@@ -18,6 +18,10 @@ data:
       - job_name: blockpulse-stream-lake
         static_configs:
           - targets: ["{{ $sink }}-0.{{ $sink }}:{{ .Values.sink.metricsPort }}"]
+      # The worker is optional (0 replicas by default), so this target is simply down when it isn't running.
+      - job_name: blockpulse-enrich
+        static_configs:
+          - targets: ["{{ include "blockpulse.name" (dict "root" . "component" "worker") }}:{{ .Values.worker.metricsPort }}"]
   alerts.yml: |
 {{ .Files.Get "files/prometheus/alerts.yml" | indent 4 }}
 ---
@@ -50,7 +54,7 @@ spec:
     metadata:
       labels: {{- include "blockpulse.labels" $ctx | nindent 8 }}
       annotations:
-        checksum/config: {{ printf "%s%s" (.Files.Get "files/prometheus/alerts.yml") (toYaml .Values.sink) | sha256sum }}
+        checksum/config: {{ printf "%s%s" (.Files.Get "files/prometheus/alerts.yml") (toYaml (dict "sink" .Values.sink "worker" .Values.worker.metricsPort)) | sha256sum }}
     spec:
       containers:
         - name: prometheus

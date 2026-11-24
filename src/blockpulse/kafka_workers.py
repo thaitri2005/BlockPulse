@@ -57,6 +57,7 @@ def enrich_topic(
     assignment_timeout=60.0,
     commit_every=500,
     commit_interval=1.0,
+    metrics=None,
 ):
     """Consume raw envelopes, enrich incomplete additions, publish, then commit input offsets.
 
@@ -131,6 +132,8 @@ def enrich_topic(
             _log("kafka_commit_skipped_group_changed", detail=str(error)[:200])
         pending.clear()
         last_checkpoint, since_checkpoint = time.monotonic(), 0
+        if metrics:
+            metrics.checkpointed(consumer)
     _log("kafka_enrichment_started", group_id=group_id, topic=RAW_TOPIC, output_topic=ENRICHED_TOPIC)
     try:
         while max_messages is None or messages < max_messages:
@@ -183,6 +186,8 @@ def enrich_topic(
             messages += 1
             events += len(enriched["events"])
             failures += len(record_errors)
+            if metrics:
+                metrics.message_processed(enriched["enrichment_summary"]["requests"], len(record_errors))
             requests += enriched["enrichment_summary"]["requests"]
             enriched_count += enriched["enrichment_summary"]["enriched"]
             offsets[str(message.partition())] = max(offsets.get(str(message.partition()), -1), message.offset())

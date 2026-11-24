@@ -22,7 +22,7 @@ The project owner is building this to learn data engineering. Optimize for their
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/guides/04-postgres-api-dashboard.md): 154 passed, 2 skipped (one is Linux-only); without it: 136 passed, 20 skipped; on Linux with `helm` and the test database: 192 passed, 1 skipped (the 15 Helm chart tests skip without `helm`)
+.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/guides/04-postgres-api-dashboard.md): 154 passed, 2 skipped (one is Linux-only); without it: 136 passed, 20 skipped; on Linux with `helm` and the test database: 195 passed, 1 skipped (the 16 Helm chart tests skip without `helm`)
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
 docker compose --profile m2 up -d --wait          # Postgres + Grafana + Prometheus (~1.1 GB); `stop` when done

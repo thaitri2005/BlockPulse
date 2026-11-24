@@ -184,3 +184,19 @@ def test_other_commit_errors_still_stop_the_worker():
         pass
     else:
         raise AssertionError("an authorization failure must not be swallowed")
+
+
+def test_worker_reports_messages_and_lag_to_metrics():
+    pytest = __import__("pytest")
+    pytest.importorskip("prometheus_client")
+    from blockpulse.metrics import EnrichmentMetrics
+    metrics = EnrichmentMetrics()
+    consumer = Consumer({}, [complete_message(n) for n in range(5)])
+    enrich_topic("metrics", consumer_factory=lambda _c: consumer, producer_factory=lambda _c: Producer({}),
+                 enricher=RateLimitedEnricher(fetch=lambda _t: None), max_messages=5, commit_every=2, metrics=metrics)
+    value = lambda name: metrics.registry.get_sample_value(name)  # noqa: E731
+    assert value("blockpulse_messages_consumed_total") == 5
+    assert value("blockpulse_enrichment_requests_total") == 0   # every transaction was complete: nothing fetched
+    assert value("blockpulse_enrichment_errors_total") == 0
+    # The same metric name the sink uses, so one lag alert covers both consumers.
+    assert value("blockpulse_consumer_lag_messages") is not None

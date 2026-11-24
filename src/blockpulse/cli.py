@@ -86,6 +86,7 @@ def build_parser() -> argparse.ArgumentParser:
     kafka_enrich.add_argument("--max-requests", type=int, default=100)
     kafka_enrich.add_argument("--max-messages", type=int)
     kafka_enrich.add_argument("--idle-timeout", type=float, default=3.0)
+    kafka_enrich.add_argument("--metrics-port", type=int, help="Expose Prometheus metrics on this port")
     kafka_lake = commands.add_parser("kafka-lake", help="Stream the enriched topic into the lake (features, rules, quality gate)")
     kafka_lake.add_argument("--lake", type=Path, default=Path("data/lake-stream"),
                             help="Lake folder to write (keep it separate from the batch lake for the same captures)")
@@ -573,9 +574,13 @@ def _main(argv: list[str] | None = None) -> int:
                 api_base=args.api_base, requests_per_second=args.requests_per_second,
                 max_requests=args.max_requests,
             )
+            metrics = None
+            if args.metrics_port:
+                from blockpulse.metrics import EnrichmentMetrics
+                metrics = EnrichmentMetrics(args.metrics_port)
             summary = _kafka_call("Kafka enrichment worker", lambda: enrich_topic(
                 args.group_id, args.bootstrap_servers, enricher=enricher,
-                max_messages=args.max_messages, idle_timeout=args.idle_timeout,
+                max_messages=args.max_messages, idle_timeout=args.idle_timeout, metrics=metrics,
             ))
             code = 0
         elif args.command == "kafka-lake":

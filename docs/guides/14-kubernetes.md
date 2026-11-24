@@ -60,10 +60,10 @@ Defaults in `values.yaml` mirror `compose.yaml` (same images, same memory ceilin
 | `bp-kafka` | StatefulSet, 2 Gi volume | Kafka 4.3.1, one KRaft broker; a plain StatefulSet, not an operator (D29) |
 | `bp-db-init`, `bp-kafka-init` | Jobs, Helm hooks | Migrations and topics after every install and upgrade; both apply only what is missing |
 | `bp-api` | Deployment, 2 pods, Service | `blockpulse serve` |
-| `bp-worker` | Deployment, 0 or 1 pod | `blockpulse kafka-enrich`; off by default, `--set worker.replicas=1` to start. Like the sink, it creates the topics in an init container before starting |
+| `bp-worker` | Deployment, 0 or 1 pod, Service | `blockpulse kafka-enrich`; off by default, `--set worker.replicas=1` to start. Like the sink, it creates the topics in an init container, exposes metrics that Prometheus scrapes, and is health-checked through them |
 | `bp-sink` | StatefulSet, 2 Gi volume | `blockpulse kafka-lake`: the enriched topic into lake tables on its volume; metrics on port 9108 |
 | `bp-maintenance` | CronJob, hourly | `lake-compact` on the sink's volume; with `--set maintenance.serveStreamedLake=true` it also rebuilds Postgres from the streamed lake |
-| `bp-prometheus` | Deployment, Service | Scrapes the sink every 5 s; the four alert rules from `observability/prometheus/alerts.yml` |
+| `bp-prometheus` | Deployment, Service | Scrapes the sink and the worker every 5 s; the four alert rules from `observability/prometheus/alerts.yml` |
 | `bp-grafana` | Deployment, Service | Postgres and Prometheus datasources; the overview and pipeline dashboards from ConfigMaps |
 
 One image (`infra/k8s/Dockerfile`, 1.41 GB) runs the API, the worker, the sink and the Jobs. It is built in two stages: the first installs the full hashed lock into a virtual environment, the second copies only that environment and runs as an unprivileged user. Almost all of the size is the dependencies themselves. k3d has no registry here, so `image-load.sh` copies the image into the node.
@@ -72,7 +72,7 @@ Choices that differ from Compose:
 
 - **Kafka advertises its pod's DNS name**, not `127.0.0.1`, because clients are other pods and a pod's IP changes on restart. It is reachable only inside the cluster.
 - **The API's readiness and liveness ask different questions.** Ready means it can query Postgres (`/readyz`), so it leaves the Service during a database outage and returns by itself. Alive means the process answers (`/healthz`); restarting the API cannot repair Postgres.
-- **The worker cannot be scaled past one.** It calls a public API within a request budget (D08), so the chart refuses more replicas and uses the `Recreate` strategy.
+- **The worker cannot be scaled past one.** It calls a public API within a request budget (D08), so the chart refuses more replicas and uses the `Recreate` strategy. Its metrics endpoint is also its health check.
 - **A changed connection string restarts the API.** The Deployment carries a checksum of the Secret; pods read their environment only at start.
 - **The sink is a StatefulSet.** It owns files: its lake lives on a volume that must follow the pod. Like the worker it is limited to one replica.
 - **Dashboards and alert rules are copies** of the files under `observability/`, because Helm reads only files inside the chart. Tests fail if a copy differs.

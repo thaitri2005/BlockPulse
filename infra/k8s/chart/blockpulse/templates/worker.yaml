@@ -4,6 +4,17 @@
 {{- end }}
 # The enrichment worker: a Kafka consumer in a fixed consumer group. It keeps no local state; its position is the
 # group's committed offsets in Kafka, so a replacement pod resumes where the last commit left off.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "blockpulse.name" $ctx }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+spec:
+  selector: {{- include "blockpulse.selector" $ctx | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ .Values.worker.metricsPort }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -35,6 +46,19 @@ spec:
             - --requests-per-second={{ .Values.worker.requestsPerSecond }}
             - --max-requests={{ .Values.worker.maxRequests | int64 }}
             - --idle-timeout={{ .Values.worker.idleTimeout | int64 }}
-          # No probes: the worker serves no port. If the process exits it is restarted; a worker that hangs
-          # without exiting would show up as consumer lag, not as a failed probe.
+            - --metrics-port={{ .Values.worker.metricsPort | int64 }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.worker.metricsPort }}
+          # The metrics endpoint doubles as the health check: a process that stops answering is restarted, and
+          # its lag is scraped, so the ConsumerFallingBehind alert covers the worker as well as the sink.
+          startupProbe:
+            httpGet: {path: /metrics, port: metrics}
+            periodSeconds: 2
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: {path: /metrics, port: metrics}
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
           resources: {{- toYaml .Values.worker.resources | nindent 12 }}

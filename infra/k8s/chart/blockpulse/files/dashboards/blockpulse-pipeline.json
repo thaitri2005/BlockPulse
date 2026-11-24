@@ -90,7 +90,7 @@
       "id": 2,
       "type": "stat",
       "title": "Consumer lag",
-      "description": "Messages behind the end of the enriched topic (alert above 1,000 for 2 min).",
+      "description": "The larger of the sink's and the worker's lag: messages still to read. Alert above 1,000 for 2 minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "blockpulse-prom"
@@ -108,7 +108,7 @@
             "type": "prometheus",
             "uid": "blockpulse-prom"
           },
-          "expr": "blockpulse_consumer_lag_messages",
+          "expr": "max(blockpulse_consumer_lag_messages)",
           "legendFormat": ""
         }
       ],
@@ -339,7 +339,7 @@
             "type": "prometheus",
             "uid": "blockpulse-prom"
           },
-          "expr": "rate(blockpulse_messages_consumed_total[1m])",
+          "expr": "rate(blockpulse_messages_consumed_total{job=\"blockpulse-stream-lake\"}[1m])",
           "legendFormat": "messages/s"
         },
         {
@@ -398,7 +398,7 @@
       "id": 7,
       "type": "timeseries",
       "title": "Consumer lag",
-      "description": "Messages the sink still has to read. The alert fires above 1,000 for two minutes.",
+      "description": "Messages still to read, per consumer: the enrichment worker on the raw topic and the sink on the enriched topic. The alert fires above 1,000 for two minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "blockpulse-prom"
@@ -417,7 +417,7 @@
             "uid": "blockpulse-prom"
           },
           "expr": "blockpulse_consumer_lag_messages",
-          "legendFormat": "lag"
+          "legendFormat": "{{job}}"
         }
       ],
       "fieldConfig": {

@@ -44,6 +44,7 @@ worker:
   maxRequests: 100
   # The worker exits when its topic has been quiet this long (seconds); Kubernetes then starts it again.
   idleTimeout: 3600
+  metricsPort: 9109
   resources:
     requests: {cpu: 100m, memory: 192Mi}
     limits: {memory: 384Mi}
