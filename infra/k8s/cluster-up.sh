@@ -48,7 +48,13 @@ if [[ "$shim" == "on" ]] && ! docker exec "$node" test -x /bin/runc.real; then
 fi
 
 kubectl config use-context "k3d-${cluster}" >/dev/null
-kubectl wait --for=condition=Ready node --all --timeout=120s
+# A cluster that was just started (not created) can refuse requests for a few seconds, so retry.
+ready=""
+for _ in $(seq 1 12); do
+  if kubectl wait --for=condition=Ready node --all --timeout=60s; then ready="yes"; break; fi
+  sleep 5
+done
+[[ -n "$ready" ]] || { echo "the node did not become Ready" >&2; exit 1; }
 # The node reports Ready before its first pods run; CoreDNS running proves image pulls and the runtime both work.
 # `rollout status` fails at once if the deployment doesn't exist yet, so retry while k3s applies its manifests.
 ok=""
