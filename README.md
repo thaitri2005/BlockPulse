@@ -64,7 +64,7 @@ flowchart LR
 
 ## What it looks like
 
-Two live captures of the public feed (ten minutes, 8,076 transactions) replayed through the Kubernetes deployment. Left: the data dashboard. Right: pipeline health; "newest event age" is red because the capture was replayed half an hour after it was recorded.
+Two live captures of the public feed (ten minutes, 8,076 transactions) replayed through the Kubernetes deployment. Left: the data dashboard. Right: pipeline health; "newest event age" is red because the capture was replayed a few hours after it was recorded.
 
 <p>
   <img src="docs/images/grafana-overview.png" alt="Data dashboard: scored transactions, flags by rule, lifecycle status" width="49%">

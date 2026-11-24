@@ -66,7 +66,7 @@ Defaults in `values.yaml` mirror `compose.yaml` (same images, same memory ceilin
 | `bp-prometheus` | Deployment, Service | Scrapes the sink every 5 s; the four alert rules from `observability/prometheus/alerts.yml` |
 | `bp-grafana` | Deployment, Service | Postgres and Prometheus datasources; the overview and pipeline dashboards from ConfigMaps |
 
-One image (`infra/k8s/Dockerfile`, 1.41 GB, the full hashed lock, unprivileged user) runs the API, the worker, the sink and the Jobs. k3d has no registry here, so `image-load.sh` copies the image into the node.
+One image (`infra/k8s/Dockerfile`, 1.41 GB) runs the API, the worker, the sink and the Jobs. It is built in two stages: the first installs the full hashed lock into a virtual environment, the second copies only that environment and runs as an unprivileged user. Almost all of the size is the dependencies themselves. k3d has no registry here, so `image-load.sh` copies the image into the node.
 
 Choices that differ from Compose:
 
@@ -148,6 +148,7 @@ Inside a sandboxed container (a cloud development session, some CI runners) thre
 
 ## Troubleshooting
 
+- **The image build fails with `429 Too Many Requests`.** Docker Hub limits anonymous pulls of the base image. Use a mirror: `BLOCKPULSE_PYTHON_IMAGE=public.ecr.aws/docker/library/python:3.12-slim bash infra/k8s/image-load.sh`.
 - **A fresh install hangs until the timeout with one pod crash-looping.** Check whether that pod needs something a post-install hook creates. With `--wait`, hooks run only after every pod is ready, so a pod that needs the hook's result can never become ready. The sink and the worker need the Kafka topics; each creates them in an init container for that reason.
 - **A fixed StatefulSet still crash-loops.** A StatefulSet won't replace a pod that never became ready. Delete the pod; it is recreated from the new spec.
 - **A large number in `values.yaml` renders as `8.388608e+06`.** Helm reads big integers as floats. Convert with `int64` in the template.

@@ -58,7 +58,7 @@ Prometheus (`observability/prometheus/prometheus.yml`) scrapes `host.docker.inte
 
 <img src="../images/grafana-pipeline.png" alt="The pipeline dashboard after a replay of two live captures, 2026-11-24" width="620">
 
-*The pipeline dashboard in the Kubernetes deployment after two live captures were replayed. Newest event age is red because the replay happened about half an hour after the capture.*
+*The pipeline dashboard in the Kubernetes deployment after two live captures were replayed. Newest event age is red because the replay happened a few hours after the capture, which is what that tile exists to show.*
 
 ### Alert rules (`observability/prometheus/alerts.yml`)
 

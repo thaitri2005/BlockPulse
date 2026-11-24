@@ -4,37 +4,37 @@ What is built, how the pieces connect, and where the code lives. The [README](..
 
 ## Data flow
 
-```text
-                 public mempool WebSocket (mempool.space regional node)
-                                   |
-              capture / collect-loop (gaps recorded, 300 reconnects per session)
-                                   |
-                   data/raw/<session>/messages.jsonl      <- source of truth, never rewritten
-                      |                          \
-        process (events, features)          capture-kafka -> Kafka raw topic -> enrich -> enriched topic
-                      |                                          -> JSONL archive / Parquet archive
-                      |                                          -> kafka-lake: features, rules, quality gate
-                      |                                             -> data/lake-stream (same tables)
-                      |                                             -> /metrics -> Prometheus -> Grafana
-        detect (structural rules)
-                      |
-     data/processed/<session>/, data/screened/<session>/
-           |                 |                         |
-   lake stage: quality   load-results / load-events   build-dataset -> train / evaluate / sweep
-   gate -> partitioned   -> Postgres -> API + Grafana  -> detector registry (champion: rules)
-   Parquet (dt/hour)       ^
-           |---------------' serving-rebuild (bulk, from the lake)
-           |
-   DuckDB (lake-query) locally, Athena over S3 in AWS
-           |
-   dbt (DuckDB): staging -> int_transaction_lifecycle -> marts (fct_transactions, fct_hourly_activity, ...)
+```mermaid
+flowchart LR
+    ws(["WebSocket feed"]) --> raw[("data/raw")]
+    raw --> proc["process,<br/>detect"] --> files[("data/processed,<br/>data/screened")]
+    files --> gate{"quality<br/>gate"} --> lake[("data/lake")]
+    files --> load["load-results,<br/>load-events"] --> pg[("Postgres")]
+    lake -. "serving-rebuild" .-> pg
+    pg --> out["API,<br/>Grafana"]
+    lake --> sql["DuckDB, Athena,<br/>dbt marts"]
+    files --> ml["dataset, model,<br/>registry"]
 ```
+
+The streaming path starts from the same raw messages and ends in the same lake tables:
+
+```mermaid
+flowchart LR
+    src["capture-kafka,<br/>kafka-replay"] --> t1[["raw topic"]] --> enr["kafka-enrich"] --> t2[["enriched topic"]]
+    t2 --> sink["kafka-lake"] --> slake[("data/lake-stream")]
+    slake -. "serving-rebuild --lake" .-> pg[("Postgres")]
+    sink --> prom["Prometheus,<br/>Grafana"]
+```
+
+`kafka-enrich` also writes failures to an errors topic, and `lake-compact` merges the streamed lake's closed hours.
 
 Unattended runs wrap the same steps: `collect-loop` captures hourly sessions, `process-pending` brings every finished session up to date (process, screen, lake, compact, log, optional Postgres load), `sync-pending` uploads to S3. On AWS these run as systemd services on one instance ([08](guides/08-aws.md)). Airflow runs the same commands as a DAG, one run per UTC day (`process-pending --date`), with retries and backfills ([13](guides/13-airflow.md)):
 
-```text
-screen ---> lake ---+--> load (Postgres, then compact) <--- prepare_database
-                    +--> dbt_build
+```mermaid
+flowchart LR
+    screen --> lake --> load["load<br/>(Postgres)"]
+    lake --> dbt["dbt_build"]
+    prep["prepare_database"] --> load
 ```
 
 ## Where it runs
@@ -50,23 +50,38 @@ The pipeline logic is the `blockpulse` package and its CLI. Four runtimes wrap i
 
 The Kubernetes layout, which mirrors the Compose services:
 
-```text
-namespace blockpulse (Helm release "bp")
-
-  StatefulSet bp-postgres --- PVC data-bp-postgres-0     Secret bp-postgres (user, password, database)
-  StatefulSet bp-kafka ------ PVC data-bp-kafka-0        one KRaft broker, reached as bp-kafka-0.bp-kafka:9092
-  StatefulSet bp-sink ------- PVC lake-bp-sink-0         blockpulse kafka-lake: enriched topic -> lake tables; /metrics
-
-  Job bp-db-init       blockpulse db-init      (migrations)   \  Helm hooks: run after every install and
-  Job bp-kafka-init    blockpulse kafka-init   (topics)       /  upgrade; both apply only what is missing
-
-  CronJob bp-maintenance    hourly lake-compact on the sink's volume (optionally serving-rebuild --lake)
-
-  Deployment bp-api (2 pods) --- Service bp-api:8000     blockpulse serve; reads Secret bp-app (BLOCKPULSE_DSN)
-  Deployment bp-worker (0 or 1)                          blockpulse kafka-enrich; off by default
-  Deployment bp-prometheus ----- Service :9090           scrapes bp-sink; alert rules from a ConfigMap
-  Deployment bp-grafana -------- Service :3000           Postgres and Prometheus datasources, two dashboards
+```mermaid
+flowchart LR
+    subgraph ns ["namespace blockpulse, Helm release bp"]
+        direction LR
+        jobs["Jobs (Helm hooks)<br/>db-init, kafka-init"]
+        worker["bp-worker<br/>Deployment, 0 or 1"]
+        kafka[("bp-kafka<br/>StatefulSet + PVC")]
+        sink[("bp-sink<br/>StatefulSet + PVC")]
+        maint["bp-maintenance<br/>CronJob, hourly"]
+        pg[("bp-postgres<br/>StatefulSet + PVC")]
+        api["bp-api<br/>Deployment, 2 pods"]
+        prom["bp-prometheus"]
+        graf["bp-grafana"]
+        worker <--> kafka --> sink
+        maint --> sink
+        sink -. "serving-rebuild --lake" .-> pg
+        jobs --> pg
+        jobs --> kafka
+        api --> pg
+        graf --> pg
+        graf --> prom --> sink
+    end
 ```
+
+| Object | Runs | Notes |
+| --- | --- | --- |
+| `bp-postgres`, `bp-kafka`, `bp-sink` | StatefulSets, each with a volume | The only state in the cluster, plus Kafka's committed offsets |
+| `bp-db-init`, `bp-kafka-init` | Jobs, after every install and upgrade | Migrations and topics; both apply only what is missing |
+| `bp-api` | `blockpulse serve`, 2 pods | Reads the connection string from `Secret/bp-app` |
+| `bp-worker` | `blockpulse kafka-enrich`, 0 or 1 pod | Off by default; creates the topics in an init container |
+| `bp-maintenance` | `lake-compact`, hourly | Optionally `serving-rebuild --lake` afterwards |
+| `bp-prometheus`, `bp-grafana` | Deployments | Scrape config, alert rules and dashboards from ConfigMaps |
 
 One image, `blockpulse:dev`, runs the API, the worker, the sink and both Jobs with different arguments. State lives only in the three volumes and in Kafka's committed offsets, so any pod can be deleted and its controller recreates it. The streamed lake reaches Postgres through `serving-rebuild --lake`, run inside the sink's pod. Airflow is not in the chart; it runs under Compose.
 
@@ -177,3 +192,4 @@ Elsewhere:
 - The Helm chart does not include Airflow. Compaction is scheduled in the cluster (a CronJob) but not under Compose, where it is run by hand.
 - Kubernetes has run only on generated traffic: in a cloud session, and in CI, which creates a cluster and runs one pod-kill drill on every push.
 - The dataset is final (2.65 million transactions; decision D32). Results on it will not be extended by further collection.
+- `cli.py` dispatches every command from one long function. It works and is tested, but it is the first thing to restructure if commands keep being added.

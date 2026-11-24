@@ -16,7 +16,7 @@ The files remain the source of truth, and the lake is the analytics store. Postg
 
 <img src="../images/grafana-overview.png" alt="The overview dashboard on two live captures, 2026-11-24" width="620">
 
-*The overview dashboard in the Kubernetes deployment, on two live captures recorded on 2026-11-24 (3,344 scored transactions, 106 flagged).*
+*The overview dashboard in the Kubernetes deployment, on two live captures recorded on 2026-11-24 (3,344 scored transactions, 106 flagged). Counts use a neutral colour; only lifecycle status is colour-coded, and the button at the top links to the pipeline dashboard.*
 
 ## Two ways data gets in
 

@@ -43,6 +43,8 @@ The chart was installed from nothing (29 s), the two capture folders were copied
 
 `docs/images/grafana-overview.png`, `grafana-pipeline.png` and `prometheus-alerts.png` were taken from that deployment at about 13:41 UTC. The capture ended at 13:07, so "newest event age" reads about 35 minutes and `DataStale` is pending. `docs/images/model-vs-gate.png` is drawn from the figures in guide 06; its source is `docs/images/model-vs-gate.html`.
 
+The dashboard screenshots were taken again at about 17:00 UTC after the dashboards were reworked (plain status names, neutral colours for counts, fitted table columns, links between the two dashboards, an "alerts firing" tile). The chart was reinstalled from nothing and the same two captures replayed, with the same counts; "newest event age" therefore reads about four hours.
+
 ## Limits
 
 - Ten minutes of traffic, not a day. The closed hour held about 300 transactions; the 30-files-to-1 compaction measured on generated traffic in the cluster ([DE7 report](2026-11-24-de7-kubernetes.md)) is the larger case.
