@@ -61,9 +61,31 @@ Data: none from the project; a 1,000-row probe table and a 500-message probe top
 
 Recovery times are from the delete command to the pod reporting Ready, on an idle cluster with the image already on the node; they are not a measure of anything under load.
 
-Tests: `tests/test_helm_chart.py` adds 5 tests (lint, StatefulSet properties for both workloads, Kafka settings, the Secret). Full suite here: 160 passed, 1 skipped.
+Tests after DE7b: `tests/test_helm_chart.py` with 5 tests (lint, StatefulSet properties for both workloads, Kafka settings, the Secret); full suite 160 passed, 1 skipped.
 
-Not verified: the CI run. The shellcheck step now includes `infra/k8s/*.sh`, and the chart tests run in the Python job if the runner has `helm` (GitHub's Ubuntu images normally do), but nothing could be pushed during this step (see below).
+## DE7c · Image, setup Jobs, API, worker, Grafana
+
+Data: none from the project. The database is empty apart from the migrations; the worker was pointed at an unreachable address (`http://127.0.0.1:9/api`), as the drills do, so nothing called the public API.
+
+| Step | Result |
+| --- | --- |
+| First image build | Failed: a dependency (`dbt-core-experimental-parser`) downloads a wheel with `urllib` during its build and didn't trust the proxy CA; pip's `PIP_CERT` doesn't cover it |
+| Set `SSL_CERT_FILE` as well | Built in 93 s; 1.41 GB; `docker run blockpulse:dev lake-schema` works |
+| `k3d image import` | 19 s |
+| Add Secret, two hook Jobs, API Deployment and Service; `helm upgrade --wait --wait-for-jobs` | 11 s; migrations `001`, `002` applied; three topics created; 2 API pods ready |
+| API through `port-forward` | `/readyz`, `/pipeline/status`, `/alerts?limit=2`, `/models/current`: 200 |
+| Add worker and Grafana; upgrade | 23 s (Grafana image pull included); dashboard listed, datasource "Database Connection OK" |
+| `--set worker.replicas=1` | Pod running, `kafka_enrichment_started` logged; `worker.replicas=2` refused by the template |
+| `kubectl top`: idle Kafka at 309–315 m CPU | Cause: the readiness probe ran a Kafka CLI command (a JVM start) every 10 s. Changed to a TCP check: 28–38 m |
+| Uninstall, delete claims, full install with `--wait --wait-for-jobs` | 19.5 s |
+| Idle memory, full stack | Pods 499 Mi (Kafka 297, Grafana 91, API 38 + 39, Postgres 34); node total 1,380 Mi |
+| `image-load.sh` with everything cached | 13 s |
+
+The 1.4 GiB total is well under the 3–4 GB estimated before starting; the estimate assumed each container would sit near its limit.
+
+Tests after DE7c: `tests/test_helm_chart.py` has 11 tests; full suite 166 passed, 1 skipped; `helm lint --strict`, ruff and shellcheck clean.
+
+Not verified: the CI run. The shellcheck step now includes `infra/k8s/*.sh`, and the chart tests run in the Python job if the runner has `helm` (GitHub's Ubuntu images normally do), but nothing could be pushed (see below). Also not done: a build of the image without the proxy settings, which is the path the laptop will take.
 
 ## Open issue: pushes are refused
 

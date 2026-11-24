@@ -68,11 +68,11 @@ spec:
             tcpSocket: {port: kafka}
             periodSeconds: 2
             failureThreshold: 90
+          # A TCP check, not a Kafka CLI call: each CLI call starts a JVM, and probing with one every 10 s cost
+          # about 0.3 CPU on an idle broker (measured). The listener opens only once the broker has started.
           readinessProbe:
-            exec:
-              command: ["sh", "-c", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
-            periodSeconds: 10
-            timeoutSeconds: 8
+            tcpSocket: {port: kafka}
+            periodSeconds: 5
           livenessProbe:
             tcpSocket: {port: kafka}
             periodSeconds: 10

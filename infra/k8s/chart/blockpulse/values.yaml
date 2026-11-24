@@ -21,3 +21,37 @@ kafka:
   resources:
     requests: {cpu: 200m, memory: 768Mi}
     limits: {memory: 1Gi}
+
+# The BlockPulse image (infra/k8s/Dockerfile). k3d has no registry here: build it, then load it into the node
+# with `k3d image import blockpulse:dev -c blockpulse`. IfNotPresent makes the kubelet use that copy.
+app:
+  image: blockpulse:dev
+  pullPolicy: IfNotPresent
+
+api:
+  replicas: 2  # stateless, so any number can run; two shows a Service spreading requests and surviving a pod kill
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 256Mi}
+
+# The enrichment worker calls a public REST API within a request budget, so it is off by default and never runs
+# more than one copy (decision D08). Turn it on with `--set worker.replicas=1`.
+worker:
+  replicas: 0
+  groupId: blockpulse-enrich
+  apiBase: https://mempool.space/api
+  requestsPerSecond: 1
+  maxRequests: 100
+  # The worker exits when its topic has been quiet this long (seconds); Kubernetes then starts it again.
+  idleTimeout: 3600
+  resources:
+    requests: {cpu: 100m, memory: 192Mi}
+    limits: {memory: 384Mi}
+
+grafana:
+  image: grafana/grafana:12.2.0
+  adminUser: admin
+  adminPassword: blockpulse_dev  # development default, as in Compose
+  resources:
+    requests: {cpu: 50m, memory: 192Mi}
+    limits: {memory: 384Mi}

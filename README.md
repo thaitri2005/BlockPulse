@@ -65,7 +65,7 @@ The regional node is passed explicitly because the default host times out from s
 | [11 · dbt](docs/guides/11-dbt.md) | Models, tests, lineage and results on the lake |
 | [12 · Streaming lake and metrics](docs/guides/12-streaming-lake-and-metrics.md) | Kafka to the lake with exactly-once output; Prometheus, alerts, pipeline dashboard |
 | [13 · Airflow](docs/guides/13-airflow.md) | The daily DAG, retries, pools, backfills, and what failed on the first run |
-| [14 · Kubernetes](docs/guides/14-kubernetes.md) | In progress: a k3d cluster and a Helm chart; Postgres and Kafka keep their data across pod kills |
+| [14 · Kubernetes](docs/guides/14-kubernetes.md) | In progress: a k3d cluster and a Helm chart for the serving stack; pod-kill drills are next |
 | [Experiments](docs/experiments/) | Dated measurements behind every claim |
 | [Learning path](docs/learning/README.md) | Exercises through the code |
 

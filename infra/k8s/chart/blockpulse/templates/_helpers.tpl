@@ -18,3 +18,19 @@ app.kubernetes.io/name: blockpulse
 app.kubernetes.io/instance: {{ .root.Release.Name }}
 app.kubernetes.io/component: {{ .component }}
 {{- end -}}
+
+{{/* In-cluster addresses, defined once so every workload agrees on them. */}}
+{{- define "blockpulse.kafkaBootstrap" -}}
+{{- $name := include "blockpulse.name" (dict "root" . "component" "kafka") -}}
+{{- printf "%s-0.%s:9092" $name $name -}}
+{{- end -}}
+
+{{/* Settings shared by every container that runs the BlockPulse image. */}}
+{{- define "blockpulse.appContainer" -}}
+image: {{ .Values.app.image }}
+imagePullPolicy: {{ .Values.app.pullPolicy }}
+securityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  capabilities: {drop: ["ALL"]}
+{{- end -}}

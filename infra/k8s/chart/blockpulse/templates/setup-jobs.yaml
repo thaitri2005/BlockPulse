@@ -1,0 +1,37 @@
+{{- /*
+Two Jobs prepare the stores: database migrations and Kafka topics. A Job runs a pod to completion and retries it
+on failure. Both are Helm hooks, so they run after every install and upgrade once the StatefulSets are ready
+(with --wait), and both commands are idempotent: they apply only what is missing.
+*/ -}}
+{{- range $job := list (dict "component" "db-init" "args" (list "db-init") "needsDsn" true) (dict "component" "kafka-init" "args" (list "kafka-init" "--bootstrap-servers" (include "blockpulse.kafkaBootstrap" $)) "needsDsn" false) }}
+{{- $ctx := dict "root" $ "component" $job.component }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "blockpulse.name" $ctx }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    # Keep the finished Job (and its logs) until the next install or upgrade replaces it.
+    helm.sh/hook-delete-policy: before-hook-creation
+spec:
+  backoffLimit: 6
+  template:
+    metadata:
+      labels: {{- include "blockpulse.labels" $ctx | nindent 8 }}
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: {{ $job.component }}
+          {{- include "blockpulse.appContainer" $ | nindent 10 }}
+          args: {{- toYaml $job.args | nindent 12 }}
+          {{- if $job.needsDsn }}
+          envFrom:
+            - secretRef:
+                name: {{ include "blockpulse.name" (dict "root" $ "component" "app") }}
+          {{- end }}
+          resources:
+            requests: {cpu: 50m, memory: 128Mi}
+            limits: {memory: 256Mi}
+{{- end }}

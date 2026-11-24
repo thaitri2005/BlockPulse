@@ -40,6 +40,7 @@ Each exercise is sized for one sitting of about 30-60 minutes. Stop when a conce
 | 24 | Orchestration: DAGs, retries, backfills | Data intervals, idempotent tasks, retries with backoff, pools vs `max_active_runs`, why a killed task must release its lock | `orchestration/airflow/dags/blockpulse_daily.py`; `collector.py` → `_Lock`; [Airflow guide](../guides/13-airflow.md) | To write together |
 | 25 | A cluster on your own machine | Clusters, nodes, pods, contexts; declared state vs started processes; debugging a pod that won't start from its events | `infra/k8s/k3d.yaml`, `infra/k8s/cluster-up.sh`; [Kubernetes guide](../guides/14-kubernetes.md) | To write together |
 | 26 | State that survives its pod | Helm charts and values, StatefulSets, volume claims, headless Services, probes, requests and limits | `infra/k8s/chart/blockpulse/templates/postgres.yaml`, `values.yaml`; `tests/test_helm_chart.py` | To write together |
+| 27 | Stateless services, jobs and configuration | Deployments vs StatefulSets, Services, Jobs and Helm hooks, Secrets and ConfigMaps, readiness vs liveness | `infra/k8s/chart/blockpulse/templates/api.yaml`, `setup-jobs.yaml`; `infra/k8s/Dockerfile` | To write together |
 
 ## Exercise outlines
 
@@ -60,6 +61,8 @@ These are starting points, not finished walkthroughs. We turn one into a full pa
 **25. A cluster on your own machine.** Run `cluster-up.sh`, then `kubectl get pods -A` and name what each system pod is for. Start a throwaway pod (`kubectl run probe --image=postgres:17 --env=POSTGRES_PASSWORD=x`), read its events with `kubectl describe pod probe`, then delete it. Question to answer: you deleted a pod started with `kubectl run` and it stayed gone; why will a pod created by a StatefulSet come back?
 
 **26. State that survives its pod.** Install the chart, create a table in Postgres with a few rows, then `kubectl -n blockpulse delete pod bp-postgres-0` and watch `kubectl -n blockpulse get pods -w`. Check the rows are still there. Then run `helm template bp infra/k8s/chart/blockpulse` and find the claim template in the output. Question to answer: `helm uninstall` leaves the claims behind; why is that the safe default, and what would you have to do to lose the data?
+
+**27. Stateless services, jobs and configuration.** With the chart installed, run `kubectl -n blockpulse scale statefulset bp-postgres --replicas=0` and watch the API pods: they stay Running but go to `0/1` ready. Scale Postgres back to 1 and watch them return. Read the two probes in `api.yaml`. Question to answer: what would happen to the API pods during that outage if liveness also used `/readyz`?
 
 ## Useful commands while learning
 

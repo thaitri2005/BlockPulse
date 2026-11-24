@@ -1,4 +1,10 @@
-# The only build that uses the repository root as its context is the Airflow image; data/ alone is tens of GB.
+# Builds use the repository root as their context; data/ alone is tens of GB, so everything is excluded
+# and each image lists what it needs. Airflow image: the lock and its wrapper. BlockPulse image
+# (infra/k8s/Dockerfile): the lock, the package metadata and the source.
 *
 !requirements.lock
 !orchestration/airflow/blockpulse.sh
+!pyproject.toml
+!README.md
+!src
+**/__pycache__

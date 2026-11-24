@@ -1,0 +1,123 @@
+{{- $ctx := dict "root" . "component" "grafana" -}}
+{{- $name := include "blockpulse.name" $ctx -}}
+{{- $postgres := include "blockpulse.name" (dict "root" . "component" "postgres") -}}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+type: Opaque
+stringData:
+  GF_SECURITY_ADMIN_USER: {{ .Values.grafana.adminUser | quote }}
+  GF_SECURITY_ADMIN_PASSWORD: {{ .Values.grafana.adminPassword | quote }}
+---
+# A ConfigMap holds non-secret files or settings; here it is mounted as files Grafana reads at startup.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-provisioning
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+data:
+  datasources.yaml: |
+    apiVersion: 1
+    datasources:
+      - name: BlockPulse
+        uid: blockpulse-pg
+        type: grafana-postgresql-datasource
+        access: proxy
+        url: {{ $postgres }}:5432
+        user: {{ .Values.postgres.user }}
+        isDefault: true
+        jsonData:
+          database: {{ .Values.postgres.database }}
+          sslmode: disable
+          postgresVersion: 1700
+          timescaledb: false
+        secureJsonData:
+          password: ${POSTGRES_PASSWORD}
+  dashboards.yaml: |
+    apiVersion: 1
+    providers:
+      - name: BlockPulse
+        type: file
+        disableDeletion: true
+        allowUiUpdates: false
+        options:
+          path: /var/lib/grafana/dashboards
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}-dashboards
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+data:
+{{- range $path, $_ := .Files.Glob "files/dashboards/*.json" }}
+  {{ base $path }}: |-
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+spec:
+  selector: {{- include "blockpulse.selector" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: 3000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "blockpulse.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "blockpulse.labels" $ctx | nindent 8 }}
+      annotations:
+        # Grafana reads provisioning files only at startup, so changed files must restart the pod.
+        checksum/files: {{ printf "%s%s" (.Files.Glob "files/dashboards/*.json" | toYaml) (toYaml .Values.postgres) | sha256sum }}
+    spec:
+      containers:
+        - name: grafana
+          image: {{ .Values.grafana.image }}
+          ports:
+            - name: http
+              containerPort: 3000
+          envFrom:
+            - secretRef:
+                name: {{ $name }}
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ $postgres }}, key: POSTGRES_PASSWORD}
+            - {name: GF_USERS_ALLOW_SIGN_UP, value: "false"}
+            - {name: GF_ANALYTICS_REPORTING_ENABLED, value: "false"}
+            - {name: GF_ANALYTICS_CHECK_FOR_UPDATES, value: "false"}
+          volumeMounts:
+            - {name: provisioning, mountPath: /etc/grafana/provisioning/datasources/datasources.yaml, subPath: datasources.yaml}
+            - {name: provisioning, mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml, subPath: dashboards.yaml}
+            - {name: dashboards, mountPath: /var/lib/grafana/dashboards}
+          startupProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 3
+            failureThreshold: 40
+          readinessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /api/health, port: http}
+            periodSeconds: 20
+            failureThreshold: 5
+          resources: {{- toYaml .Values.grafana.resources | nindent 12 }}
+      volumes:
+        - name: provisioning
+          configMap: {name: {{ $name }}-provisioning}
+        - name: dashboards
+          configMap: {name: {{ $name }}-dashboards}

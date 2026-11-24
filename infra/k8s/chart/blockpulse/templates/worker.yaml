@@ -1,0 +1,38 @@
+{{- $ctx := dict "root" . "component" "worker" -}}
+{{- if gt (int .Values.worker.replicas) 1 }}
+{{- fail "worker.replicas must be 0 or 1: one enrichment worker keeps the public API request budget enforceable (D08)" }}
+{{- end }}
+# The enrichment worker: a Kafka consumer in a fixed consumer group. It keeps no local state; its position is the
+# group's committed offsets in Kafka, so a replacement pod resumes where the last commit left off.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "blockpulse.name" $ctx }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+spec:
+  replicas: {{ .Values.worker.replicas }}
+  # Recreate: stop the old pod before starting the new one, so an upgrade never runs two workers at once.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "blockpulse.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "blockpulse.labels" $ctx | nindent 8 }}
+    spec:
+      # SIGTERM lets the worker commit its offsets; after this many seconds it is killed.
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: worker
+          {{- include "blockpulse.appContainer" . | nindent 10 }}
+          args:
+            - kafka-enrich
+            - --group-id={{ .Values.worker.groupId }}
+            - --bootstrap-servers={{ include "blockpulse.kafkaBootstrap" . }}
+            - --api-base={{ .Values.worker.apiBase }}
+            - --requests-per-second={{ .Values.worker.requestsPerSecond }}
+            - --max-requests={{ .Values.worker.maxRequests | int64 }}
+            - --idle-timeout={{ .Values.worker.idleTimeout | int64 }}
+          # No probes: the worker serves no port. If the process exits it is restarted; a worker that hangs
+          # without exiting would show up as consumer lag, not as a failed probe.
+          resources: {{- toYaml .Values.worker.resources | nindent 12 }}

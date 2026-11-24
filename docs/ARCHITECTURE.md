@@ -59,6 +59,7 @@ Design rules that hold everywhere:
 | ML evaluation | `build-dataset`, `verify-dataset`, `train-iforest`, `evaluate-iforest`, `sweep`, `detectors ...` | [06](guides/06-ml-evaluation.md) |
 | Unattended collection | `collect`, `collect-loop`, `process-pending` (`--date` for one day), `sync-pending`, `compact-raw` | [07](guides/07-collection.md), [08](guides/08-aws.md) |
 | Orchestration | Airflow DAG `blockpulse_daily` in the `airflow` Compose profile; `airflow backfill create` | [13](guides/13-airflow.md) |
+| Kubernetes | `infra/k8s/cluster-up.sh`, `infra/k8s/image-load.sh`, `helm upgrade --install bp infra/k8s/chart/blockpulse` | [14](guides/14-kubernetes.md) |
 | Load test and drills | `benchmark batch`, `benchmark streaming`, `drill enrich-crash`, `drill broker-restart`, `drill postgres-crash` | [09](guides/09-load-test.md), [10](guides/10-failure-drills.md) |
 
 ## Code
@@ -104,7 +105,7 @@ Elsewhere:
 | `observability/grafana/` | Provisioned datasources (Postgres, Prometheus) and dashboards (data, pipeline health) |
 | `observability/prometheus/` | Scrape config and alert rules |
 | `compose.yaml` | Profiles `m1` (Kafka), `m2` (Postgres, Grafana, Prometheus) and `airflow` |
-| `infra/k8s/` | k3d cluster definition and creation script; Helm chart `chart/blockpulse/` (Postgres and Kafka StatefulSets so far, [14](guides/14-kubernetes.md)) |
+| `infra/k8s/` | k3d cluster definition and creation script; the BlockPulse image (`Dockerfile`, `image-load.sh`); Helm chart `chart/blockpulse/` with Postgres and Kafka StatefulSets, setup Jobs, API, worker and Grafana ([14](guides/14-kubernetes.md)) |
 | `scripts/` | Laptop collection task, M2 demo, M3 reproduction |
 | `examples/` | Learning exercise 1 and synthetic fixtures |
 | `.github/workflows/ci.yml` | CI: pytest with Postgres, Terraform checks, container rehearsals |
@@ -121,6 +122,7 @@ Elsewhere:
 | Modelling | dbt-core 1.12 with dbt-duckdb | Marts and data tests over the lake |
 | Serving | PostgreSQL 17, FastAPI, Grafana 12 | Read-only API |
 | Orchestration | Apache Airflow 3.3 (standalone, LocalExecutor, SQLite metadata) | Tasks call the `blockpulse` CLI from a separate venv; a one-slot pool guards the data root |
+| Kubernetes (in progress) | k3d (k3s 1.31) and Helm 3 | The serving stack as StatefulSets, Deployments and Jobs; defaults mirror `compose.yaml` |
 | Metrics | Prometheus 3.5, prometheus-client | Scrapes the stream sink every 5 s; alert rules for lag, freshness, quarantine, sink down |
 | ML | scikit-learn Isolation Forest | Local append-only registry instead of MLflow |
 | Infrastructure | Terraform (AWS provider 6.x), systemd on Amazon Linux 2023 | No inbound ports, Session Manager, self-expiring |

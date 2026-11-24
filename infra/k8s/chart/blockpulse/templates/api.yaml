@@ -1,0 +1,58 @@
+{{- $ctx := dict "root" . "component" "api" -}}
+{{- $name := include "blockpulse.name" $ctx -}}
+# A normal Service: one virtual IP that spreads connections over the ready API pods.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+spec:
+  selector: {{- include "blockpulse.selector" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+# A Deployment keeps N interchangeable pods running. The API holds no state, so pods have random names,
+# no volumes, and can be replaced in any order.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+spec:
+  replicas: {{ .Values.api.replicas }}
+  selector:
+    matchLabels: {{- include "blockpulse.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "blockpulse.labels" $ctx | nindent 8 }}
+      annotations:
+        # A changed connection string must restart the pods; a pod reads its environment only at start.
+        checksum/secret: {{ include (print $.Template.BasePath "/app-secret.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: api
+          {{- include "blockpulse.appContainer" . | nindent 10 }}
+          args: ["serve", "--host", "0.0.0.0", "--port", "8000"]
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: {{ include "blockpulse.name" (dict "root" . "component" "app") }}
+          startupProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 2
+            failureThreshold: 30
+          # /readyz runs a query, so a pod leaves the Service while Postgres is down and returns by itself.
+          readinessProbe:
+            httpGet: {path: /readyz, port: http}
+            periodSeconds: 5
+            timeoutSeconds: 3
+          # /healthz does not touch the database: restarting the API can't fix a Postgres outage.
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+            timeoutSeconds: 3
+          resources: {{- toYaml .Values.api.resources | nindent 12 }}
