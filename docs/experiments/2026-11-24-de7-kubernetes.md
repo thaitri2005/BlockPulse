@@ -44,3 +44,27 @@ In this session the command is:
 ```bash
 K3D_CA_BUNDLE=/root/.ccr/ca-bundle.crt bash infra/k8s/cluster-up.sh
 ```
+
+## DE7b · Postgres and Kafka from a Helm chart
+
+Data: none from the project; a 1,000-row probe table and a 500-message probe topic, created and removed by hand.
+
+| Step | Result |
+| --- | --- |
+| First install | Postgres ready; Kafka in `CrashLoopBackOff`: `Invalid value 8.388608e+06 for configuration message.max.bytes` (Helm rendered a large integer as a float) |
+| Fix the template (`int64`), `helm upgrade --wait` | Timed out after 5 min with the pod still crash-looping on the old spec: the StatefulSet waits for a ready pod before updating it |
+| Delete the pod by hand | Recreated from the new spec, ready in 18 s |
+| Uninstall, delete the claims, install again with `--wait` | 12.4 s |
+| Force-delete `bp-postgres-0` holding 1,000 rows | Ready again in 2.8 s, 1,000 rows |
+| Force-delete `bp-kafka-0` holding 500 messages | Ready again in 6.4 s, end offset 500 |
+| `kubectl top pods` 45 s after install | Kafka 288 Mi (311 m CPU while starting), Postgres 30 Mi |
+
+Recovery times are from the delete command to the pod reporting Ready, on an idle cluster with the image already on the node; they are not a measure of anything under load.
+
+Tests: `tests/test_helm_chart.py` adds 5 tests (lint, StatefulSet properties for both workloads, Kafka settings, the Secret). Full suite here: 160 passed, 1 skipped.
+
+Not verified: the CI run. The shellcheck step now includes `infra/k8s/*.sh`, and the chart tests run in the Python job if the runner has `helm` (GitHub's Ubuntu images normally do), but nothing could be pushed during this step (see below).
+
+## Open issue: pushes are refused
+
+`git push` to `thaitri2005/BlockPulse` returns 403 ("Claude doesn't have GitHub access"). The commits exist only in the session until the owner installs the Claude GitHub App on the repository or reconnects GitHub. Remove this section once a push succeeds.

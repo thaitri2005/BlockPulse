@@ -76,6 +76,6 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Lint shell scripts
-        run: shellcheck infra/aws/instance/*.sh infra/aws/tests/*.sh
+        run: shellcheck infra/aws/instance/*.sh infra/aws/tests/*.sh infra/k8s/*.sh
       - name: Install, process, upload, stop, and deadline poweroff under systemd
         run: bash infra/aws/tests/run_container_tests.sh

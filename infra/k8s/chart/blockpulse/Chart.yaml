@@ -1,0 +1,6 @@
+apiVersion: v2
+name: blockpulse
+description: The BlockPulse serving stack on Kubernetes (Postgres and Kafka; the API, worker and Grafana follow in DE7c)
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,0 +1,8 @@
+BlockPulse {{ .Chart.Version }} installed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+  kubectl -n {{ .Release.Namespace }} get pods,pvc
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ .Release.Name }}-postgres 5432:5432   # psql on 127.0.0.1
+
+In-cluster addresses:
+  Postgres  {{ .Release.Name }}-postgres:5432
+  Kafka     {{ .Release.Name }}-kafka-0.{{ .Release.Name }}-kafka:9092

@@ -104,6 +104,7 @@ Elsewhere:
 | `observability/grafana/` | Provisioned datasources (Postgres, Prometheus) and dashboards (data, pipeline health) |
 | `observability/prometheus/` | Scrape config and alert rules |
 | `compose.yaml` | Profiles `m1` (Kafka), `m2` (Postgres, Grafana, Prometheus) and `airflow` |
+| `infra/k8s/` | k3d cluster definition and creation script; Helm chart `chart/blockpulse/` (Postgres and Kafka StatefulSets so far, [14](guides/14-kubernetes.md)) |
 | `scripts/` | Laptop collection task, M2 demo, M3 reproduction |
 | `examples/` | Learning exercise 1 and synthetic fixtures |
 | `.github/workflows/ci.yml` | CI: pytest with Postgres, Terraform checks, container rehearsals |

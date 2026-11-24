@@ -19,11 +19,13 @@ The project owner is building this to learn data engineering. Optimize for their
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/guides/04-postgres-api-dashboard.md): 154 passed, 2 skipped (one is Linux-only); without it: 136 passed, 20 skipped
+.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/guides/04-postgres-api-dashboard.md): 154 passed, 2 skipped (one is Linux-only); without it: 136 passed, 20 skipped; 5 more pass when `helm` is installed, otherwise 5 more skip
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
 docker compose --profile m2 up -d --wait          # Postgres + Grafana + Prometheus (~1.1 GB); `stop` when done
 docker compose --profile airflow up -d --wait --build   # Airflow at 127.0.0.1:8080 (~1.0-1.3 GB); DAG data root is data/orchestrated/
+bash infra/k8s/cluster-up.sh                      # k3d cluster "blockpulse" (Git Bash or WSL; ~0.4 GB idle); `k3d cluster stop blockpulse` when done
+helm upgrade --install bp infra/k8s/chart/blockpulse -n blockpulse --create-namespace --wait   # Postgres + Kafka as StatefulSets
 ```
 
 Rebuild the whole M3 chain and compare with the recorded artifacts: `powershell -File scripts/reproduce_m3.ps1 [-Manifest data/datasets/dataset-<id>.json]` (`blockpulse verify-dataset <manifest>` checks a manifest alone). Model splits read from the Parquet lake when it matches the manifest; manifests built before 2026-10-19 keep file order and read JSONL only, so old results reproduce exactly. The champion detector is in `data/detectors/registry.jsonl` (`blockpulse detectors status`); the rules are champion until a model clears the gate.
@@ -59,6 +61,7 @@ CI fails if the lock doesn't match `pyproject.toml`. The AWS bundle ships the sa
 - Postgres tests drop the `public` schema: only ever point `BLOCKPULSE_TEST_DSN` at `blockpulse_test`.
 - Schema changes are new numbered files in `src/blockpulse/migrations/`; never edit an applied one.
 - The lake contract in `src/blockpulse/lake.py` is the single schema source. After changing it, regenerate `infra/aws/terraform/lake_schema.json` with `python -m blockpulse lake-schema --output infra/aws/terraform/lake_schema.json` (a test fails otherwise) and bump `LAKE_SCHEMA_VERSION` if existing files become incompatible.
+- Kubernetes objects live in the Helm chart `infra/k8s/chart/blockpulse/`; its defaults mirror `compose.yaml`. After changing a template, run `helm lint --strict` and `pytest tests/test_helm_chart.py`. In a cloud session, create the cluster with `K3D_CA_BUNDLE=/root/.ccr/ca-bundle.crt` (see docs/guides/14-kubernetes.md).
 - SQL in `analytics/queries/` must run in both DuckDB and Athena (Trino): stick to standard SQL, and test with `blockpulse lake-query`.
 - dbt runs through `blockpulse dbt <args>` (absolute paths). New models need tests in their YAML; if a mart restates a shared query, check it matches.
 - Tests must not hit the public API. Use the fixtures in `examples/fixtures/` or mocks, as the existing tests do.

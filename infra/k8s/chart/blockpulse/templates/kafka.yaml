@@ -1,0 +1,88 @@
+{{- $ctx := dict "root" . "component" "kafka" -}}
+{{- $name := include "blockpulse.name" $ctx -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+spec:
+  clusterIP: None
+  # Clients must be able to look the broker up while it is starting, or a restarted broker can't be found
+  # until it is already ready.
+  publishNotReadyAddresses: true
+  selector: {{- include "blockpulse.selector" $ctx | nindent 4 }}
+  ports:
+    - name: kafka
+      port: 9092
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels: {{- include "blockpulse.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "blockpulse.labels" $ctx | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 1000  # the image runs as uid 1000; make the volume writable for it
+      containers:
+        - name: kafka
+          image: {{ .Values.kafka.image }}
+          ports:
+            - name: kafka
+              containerPort: 9092
+          env:
+            # One broker that is also its own controller (KRaft), exactly as in compose.yaml.
+            - {name: KAFKA_NODE_ID, value: "1"}
+            - {name: KAFKA_PROCESS_ROLES, value: "broker,controller"}
+            - {name: KAFKA_LISTENERS, value: "PLAINTEXT://:9092,CONTROLLER://:9093"}
+            # The address the broker tells clients to use. It must be the pod's stable DNS name: a pod IP changes
+            # on every restart, and clients would keep dialling the old one.
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://{{ $name }}-0.{{ $name }}.{{ .Release.Namespace }}.svc.cluster.local:9092"
+            - {name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP, value: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"}
+            - {name: KAFKA_CONTROLLER_LISTENER_NAMES, value: "CONTROLLER"}
+            - {name: KAFKA_CONTROLLER_QUORUM_VOTERS, value: "1@localhost:9093"}
+            - {name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR, value: "1"}
+            - {name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR, value: "1"}
+            - {name: KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS, value: "0"}
+            - {name: KAFKA_AUTO_CREATE_TOPICS_ENABLE, value: "false"}
+            # `int64` matters: Helm reads large YAML numbers as floats, and quoting one prints 8.388608e+06,
+            # which Kafka rejects at startup.
+            - {name: KAFKA_MESSAGE_MAX_BYTES, value: {{ .Values.kafka.messageMaxBytes | int64 | quote }}}
+            - {name: KAFKA_REPLICA_FETCH_MAX_BYTES, value: {{ add (.Values.kafka.messageMaxBytes | int64) 1048576 | quote }}}
+            - {name: KAFKA_HEAP_OPTS, value: {{ .Values.kafka.heapOpts | quote }}}
+            - {name: KAFKA_LOG_DIRS, value: /var/lib/kafka/data/logs}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/kafka/data
+          startupProbe:
+            tcpSocket: {port: kafka}
+            periodSeconds: 2
+            failureThreshold: 90
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+            periodSeconds: 10
+            timeoutSeconds: 8
+          livenessProbe:
+            tcpSocket: {port: kafka}
+            periodSeconds: 10
+            failureThreshold: 6
+          resources: {{- toYaml .Values.kafka.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.kafka.storage }}

@@ -1,0 +1,23 @@
+# Defaults mirror compose.yaml so the two stacks can be compared: same images, same memory ceilings.
+# Override per install with `--set key=value` or `-f my-values.yaml`.
+
+postgres:
+  image: postgres:17
+  database: blockpulse
+  user: blockpulse
+  # Development default, the same as Compose. Set a real one for anything reachable by others.
+  password: blockpulse_dev
+  storage: 2Gi
+  resources:
+    # requests: what the scheduler reserves. limits: where the kernel throttles CPU or kills for memory.
+    requests: {cpu: 100m, memory: 256Mi}
+    limits: {memory: 512Mi}
+
+kafka:
+  image: apache/kafka:4.3.1
+  heapOpts: "-Xms256m -Xmx512m"
+  messageMaxBytes: 8388608
+  storage: 2Gi
+  resources:
+    requests: {cpu: 200m, memory: 768Mi}
+    limits: {memory: 1Gi}
