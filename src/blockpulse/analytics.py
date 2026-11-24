@@ -12,12 +12,14 @@ from blockpulse.lake import TABLES
 QUERIES_DIR = Path(__file__).resolve().parents[2] / "analytics" / "queries"
 
 
-def connect(root: Path):
+def connect(root: Path, lake: Path | None = None):
+    """DuckDB views over the lake under `root`, or over another lake folder (for example the stream sink's)."""
     import duckdb
     connection = duckdb.connect()
     connection.execute("SET TimeZone = 'UTC'")  # match Athena, which works in UTC
+    lake = Path(lake) if lake is not None else root / "lake"
     for name, table in TABLES.items():
-        directory = root / "lake" / name
+        directory = lake / name
         if not any(directory.rglob("*.parquet")):
             continue
         pattern = (directory / ("*/*/*.parquet" if table.hourly else "*/*.parquet")).as_posix()

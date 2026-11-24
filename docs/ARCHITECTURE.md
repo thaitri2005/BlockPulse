@@ -86,7 +86,7 @@ The principles are stated in the [README](../README.md#design-principles). What 
 | Capture and process | `capture`, `process`, `detect`, `lab`, `trace` | [01](guides/01-capture-and-process.md), [02](guides/02-structural-rules.md) |
 | Kafka | `kafka-init`, `capture-kafka`, `kafka-replay`, `kafka-archive`, `kafka-enrich`, `kafka-parquet`, `kafka-lake` | [03](guides/03-kafka.md), [12](guides/12-streaming-lake-and-metrics.md) |
 | Postgres and API | `db-init`, `load-results`, `load-events`, `serving-rebuild`, `serve` | [04](guides/04-postgres-api-dashboard.md) |
-| Lake and SQL | `lake-query`, `lake-schema` (the lake itself is built by `process-pending`) | [05](guides/05-lake-and-athena.md) |
+| Lake and SQL | `lake-query`, `lake-schema`, `lake-compact` (the lake itself is built by `process-pending` or `kafka-lake`) | [05](guides/05-lake-and-athena.md) |
 | Modelling | `dbt build`, `dbt docs generate`, any dbt command (`blockpulse dbt ...`) | [11](guides/11-dbt.md) |
 | ML evaluation | `build-dataset`, `verify-dataset`, `train-iforest`, `evaluate-iforest`, `sweep`, `detectors ...` | [06](guides/06-ml-evaluation.md) |
 | Unattended collection | `collect`, `collect-loop`, `process-pending` (`--date` for one day), `sync-pending`, `compact-raw` | [07](guides/07-collection.md), [08](guides/08-aws.md) |
@@ -108,11 +108,12 @@ Python package `src/blockpulse/` (about 6,200 lines, flat on purpose):
 | `storage.py` | 56 | Never-overwrite run folders, atomic summaries |
 | `kafka_pipeline.py`, `kafka_workers.py` | 571 | Topics, publisher, replay, archive consumer, enrichment consumer (batched checkpoints) |
 | `stream_lake.py` | 216 | Enriched topic to lake tables in offset-named micro-batches, through the quality gate (`kafka-lake`) |
+| `lake_compact.py` | 80 | Merge the streamed lake's small files, one per closed hour (`lake-compact`) |
 | `metrics.py` | 71 | Prometheus metrics for the stream sink: lag, freshness, throughput, quarantines |
 | `enrichment.py`, `parquet_archive.py` | 370 | Rate-limited REST enrichment; Kafka-to-Parquet archive |
 | `db.py`, `results.py`, `lifecycle.py` + `migrations/` | 303 | Postgres migrations; bulk (`COPY` + set-based merge) duplicate-safe loads; lifecycle status projection |
 | `warehouse.py` | 46 | Runs the dbt project with absolute paths (`dbt`) |
-| `serving.py` | 190 | Rebuild the serving tables from the lake and swap them in atomically (`serving-rebuild`) |
+| `serving.py` | 196 | Rebuild the serving tables from the batch or the streamed lake and swap them in atomically (`serving-rebuild`) |
 | `api.py`, `trace.py` | 238 | Read-only FastAPI; one transaction traced back to its raw message |
 | `lake.py`, `analytics.py` | 356 | Lake contracts, quality gate, partitioned writer, Glue schema export; DuckDB views |
 | `dataset.py` | 320 | Checksummed chronological manifests, lake- or JSONL-backed split loading |
@@ -165,8 +166,8 @@ Elsewhere:
 
 - One Kafka broker and one instance: nothing is highly available. The Kubernetes cluster has one node, so it shows self-healing of pods, not survival of a node.
 - Scoring is offline (files in, files out); no streaming feature or score worker.
-- The Kafka path and the Postgres path connect through files, not topics. The stream sink writes a separate lake (`data/lake-stream`), and nothing loads it into Postgres yet.
-- The stream sink makes small files (one per partition per 5-second batch); hourly compaction isn't built.
+- The streamed lake reaches Postgres only through a full `serving-rebuild --lake`, not a continuous load, and it is a separate lake (`data/lake-stream`) from the batch one.
+- The stream sink makes small files (one per partition per 5-second batch). `lake-compact` merges closed hours, but nothing schedules it.
 - Postgres is a serving copy on one 512 MB container. Incremental loads slow down as the random-keyed `lifecycle_events` index outgrows memory, so large backfills use `serving-rebuild` ([04](guides/04-postgres-api-dashboard.md#two-ways-data-gets-in)).
 - The Kafka-to-Parquet archive writes one file per message (built for restart clarity); the lake is the right-sized store.
 - The Helm chart covers the serving stack only. Prometheus, the pipeline dashboard, Airflow and the stream sink run under Compose.

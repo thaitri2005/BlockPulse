@@ -90,15 +90,21 @@ def _fallback_events_file(screened: Path) -> Path | None:
     return None
 
 
-def rebuild_serving(root: Path, dsn: str | None = None) -> dict:
-    """Rebuild scores, transactions and lifecycle_events from the lake (plus older sessions' files) and swap them in."""
+def rebuild_serving(root: Path, dsn: str | None = None, *, lake_dir: Path | None = None) -> dict:
+    """Rebuild scores, transactions and lifecycle_events from the lake (plus older sessions' files) and swap them in.
+
+    `lake_dir` points the rebuild at another lake folder with the same tables, in practice the stream sink's
+    (`data/lake-stream`). That lake is taken as the whole truth: no older sessions are added from files, because the
+    stream names a capture by its run id and the files by folder name, so mixing the two would count captures twice.
+    """
     from blockpulse.analytics import connect as lake_connect
     started = time.monotonic()
     timings = {}
-    lake = lake_connect(root)
+    lake = lake_connect(root, lake_dir)
     lake_sessions = {row[0] for row in lake.execute("SELECT DISTINCT session FROM transactions").fetchall()}
-    fallback = _fallback_sessions(root, lake_sessions)
-    counts = {"scores": 0, "lifecycle_events": 0, "fallback_sessions": [p.name for p in fallback]}
+    fallback = [] if lake_dir is not None else _fallback_sessions(root, lake_sessions)
+    counts = {"source_lake": str(lake_dir if lake_dir is not None else root / "lake"), "scores": 0, "lifecycle_events": 0,
+              "fallback_sessions": [p.name for p in fallback]}
 
     with db.connect(dsn) as pg:
         with pg.transaction():

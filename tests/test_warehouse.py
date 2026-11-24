@@ -43,3 +43,37 @@ def test_views_use_absolute_paths_and_work_from_any_directory(warehouse, monkeyp
     monkeypatch.chdir(tmp_path)  # somewhere unrelated to the dbt project
     connection = duckdb.connect(str(warehouse / "dbt" / "blockpulse.duckdb"), read_only=True)
     assert connection.execute("SELECT count(*) FROM main.stg_transactions").fetchone()[0] > 0
+
+
+def test_hourly_mart_can_be_refreshed_for_named_days_only(warehouse):
+    """With `dts`, the hourly mart replaces just those days; without it, it is rebuilt in full as before."""
+    import json
+
+    import duckdb
+    database = str(warehouse / "dbt" / "blockpulse.duckdb")
+
+    def table():
+        with duckdb.connect(database, read_only=True) as connection:
+            return connection.execute("SELECT * FROM main.fct_hourly_activity ORDER BY dt, hour").fetchall()
+
+    def spoil():
+        with duckdb.connect(database) as connection:
+            connection.execute("UPDATE main.fct_hourly_activity SET transactions = -1")
+
+    def refresh(days):
+        return run_dbt(warehouse, ["run", "--select", "fct_hourly_activity", "--vars", json.dumps({"dts": days})])
+
+    correct = table()
+    days = sorted({row[0] for row in correct})
+    assert correct and days
+
+    spoil()
+    assert refresh(["1999-01-01"])           # a day that isn't in the lake: nothing may be touched
+    assert {row[2] for row in table()} == {-1}
+    assert refresh(days)                     # the real days: recomputed and replaced
+    assert table() == correct
+    assert refresh(days) and table() == correct  # repeating it changes nothing (delete+insert, not append)
+
+    spoil()
+    assert run_dbt(warehouse, ["build"])     # the normal full build still rebuilds everything and passes its tests
+    assert table() == correct

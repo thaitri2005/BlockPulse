@@ -184,6 +184,9 @@ def build_parser() -> argparse.ArgumentParser:
                                 help="Only captures that started on this UTC date (YYYY-MM-DD); refused while one is recording")
     pending_parser.add_argument("--no-compact", action="store_true",
                                 help="Leave events and raw uncompressed (a later stage of the same session will compact)")
+    lake_compact = commands.add_parser("lake-compact", help="Merge the streamed lake's small files: one file per closed hour")
+    lake_compact.add_argument("--lake", type=Path, default=Path("data/lake-stream"), help="The stream sink's lake folder")
+    lake_compact.add_argument("--include-latest", action="store_true", help="Also compact the newest hour (only when no sink is writing)")
     lake_query = commands.add_parser("lake-query", help="Run SQL over the local Parquet lake with DuckDB (same SQL as Athena)")
     lake_query.add_argument("query", help="A .sql file, or a named query from analytics/queries (e.g. hourly_flag_rate)")
     lake_query.add_argument("--root", type=Path, default=Path("data"))
@@ -192,6 +195,7 @@ def build_parser() -> argparse.ArgumentParser:
     dbt_parser.add_argument("dbt_args", nargs=argparse.REMAINDER, help="Arguments passed to dbt")
     rebuild = commands.add_parser("serving-rebuild", help="Rebuild the Postgres serving tables from the lake in bulk and swap them in")
     rebuild.add_argument("--root", type=Path, default=Path("data"))
+    rebuild.add_argument("--lake", type=Path, help="Serve this lake folder instead of <root>/lake, for example data/lake-stream")
     compact = commands.add_parser("compact-raw", help="Gzip the raw capture of every fully processed session (about 5x smaller)")
     compact.add_argument("--root", type=Path, default=Path("data"))
     lake_schema = commands.add_parser("lake-schema", help="Print the lake table schemas (the source for the Athena/Glue tables)")
@@ -458,6 +462,11 @@ def _main(argv: list[str] | None = None) -> int:
             else:
                 summary = collector.sync_pending(layout, bucket=args.bucket, prefix=args.prefix)
                 code = 0 if not summary["failed"] else 4
+        elif args.command == "lake-compact":
+            from blockpulse.lake_compact import compact_lake
+            output = None
+            summary = compact_lake(args.lake, include_latest=args.include_latest)
+            code = 0
         elif args.command == "lake-query":
             try:
                 from blockpulse.analytics import run_query
@@ -472,7 +481,7 @@ def _main(argv: list[str] | None = None) -> int:
         elif args.command == "serving-rebuild":
             from blockpulse.serving import rebuild_serving
             output = None
-            summary = _kafka_call("Serving rebuild", lambda: rebuild_serving(args.root))
+            summary = _kafka_call("Serving rebuild", lambda: rebuild_serving(args.root, lake_dir=args.lake))
             code = 0
         elif args.command == "compact-raw":
             from blockpulse import collector

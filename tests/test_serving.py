@@ -56,3 +56,32 @@ def test_rebuild_matches_incremental_loading_and_swaps_cleanly(tmp_path, transac
     rebuild_serving(layout.root, PG_DSN)  # a second rebuild works and gives the same tables
     with db.connect(PG_DSN) as connection:
         assert snapshot(connection) == incremental
+
+
+@needs_postgres
+def test_serving_can_be_rebuilt_from_the_streamed_lake(tmp_path, transaction):
+    """The stream sink's lake serves the same transactions and scores as the batch lake; only the run id differs."""
+    from blockpulse.stream_lake import stream_to_lake
+    from tests.test_stream_lake import FakeConsumer, enriched_messages
+    layout = captured_layout(tmp_path, transaction, sessions=3)
+    assert collector.process_pending(layout)["failed"] == []
+    FakeConsumer.committed = {}
+    messages = enriched_messages(layout)
+    stream_lake = tmp_path / "lake-stream"
+    stream_to_lake(stream_lake, "g", "unused", consumer_factory=lambda _c: FakeConsumer(messages), idle_timeout=0.1, batch_messages=2)
+
+    with db.connect(PG_DSN) as connection:
+        fresh(connection)
+    rebuild_serving(layout.root, PG_DSN)
+    with db.connect(PG_DSN) as connection:
+        from_batch = snapshot(connection)
+        fresh(connection)
+    result = rebuild_serving(layout.root, PG_DSN, lake_dir=stream_lake)
+    with db.connect(PG_DSN) as connection:
+        from_stream = snapshot(connection)
+
+    assert result["source_lake"] == str(stream_lake) and result["fallback_sessions"] == []
+    assert from_stream["transactions"] == from_batch["transactions"] and from_batch["transactions"]
+    without_run = lambda rows: sorted(row[1:] for row in rows)  # noqa: E731  (column 0 is run_id in both queries)
+    assert without_run(from_stream["scores"]) == without_run(from_batch["scores"])
+    assert [(r[0], *r[2:]) for r in from_stream["lifecycle_events"]] == [(r[0], *r[2:]) for r in from_batch["lifecycle_events"]]

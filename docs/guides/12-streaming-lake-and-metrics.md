@@ -70,8 +70,28 @@ Tests (`tests/test_stream_lake.py`, `tests/test_metrics.py`):
 - A replay with different batch boundaries leaves no stale rows.
 - The metrics count rows, quarantines and freshness, both directly and when the sink drives them.
 
+## Compaction (`lake_compact.py`)
+
+The sink writes one file per Kafka partition per micro-batch, so an hour of traffic becomes hundreds of small files. Query engines pay per file: a listing, a footer read, and in Athena a minimum charge. *Compaction* rewrites a partition directory as one sorted file holding the same rows.
+
+```powershell
+.\.venv\Scripts\python.exe -m blockpulse lake-compact --lake data/lake-stream                    # every closed hour
+.\.venv\Scripts\python.exe -m blockpulse lake-compact --lake data/lake-stream --include-latest   # only when no sink is running
+```
+
+- **Only closed hours.** The newest hour in each table is skipped: the sink may still write to it, and a replay after a crash replaces files there by name, which a merged file would hide.
+- **Safe to interrupt and repeat.** The merged file is written under a temporary name and renamed before the inputs are deleted. If a run dies in between, the hour briefly holds both; the next run merges them and drops the exact duplicate rows. A second run on a compacted lake does nothing.
+- **Rows are not changed.** The quality gate already ran when they were written.
+
+## Serving the streamed lake
+
+`serving-rebuild --lake data/lake-stream` rebuilds the Postgres serving tables from the stream sink's lake instead of the batch lake, so the API and Grafana show what was streamed ([04](04-postgres-api-dashboard.md#two-ways-data-gets-in)). The streamed lake is taken as the whole truth for that rebuild: the stream names a capture by its run id and the batch path by folder name, so mixing the two would count captures twice.
+
+Both are covered by tests on fixture data (`tests/test_lake_compact.py`, `tests/test_serving.py`): a compacted lake returns identical rows, and serving rebuilt from the streamed lake equals serving rebuilt from the batch lake apart from the run id. Neither has been timed on recorded traffic.
+
 ## Limits
 
-- Small files: a 5-second batch per partition makes many small Parquet files under live traffic. Compacting each hour after it closes would fix that; it isn't built yet.
+- Compaction is a command, not a schedule: nothing runs it hourly yet.
+- Serving from the streamed lake is a full rebuild, not a continuous load, so Postgres is as fresh as the last rebuild.
 - One consumer, run by hand. Airflow schedules batch jobs, not long-running consumers ([13](13-airflow.md)); DE7 (Kubernetes) is where it would get supervision.
 - Freshness is measured from the newest event the sink has *seen*, so it can't tell "the feed stopped" from "the sink stopped". `StreamLakeDown` covers the second case.

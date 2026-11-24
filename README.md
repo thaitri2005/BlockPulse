@@ -147,7 +147,7 @@ The last row is a result, not a failure: the evaluation exists to decide honestl
 ## Limits
 
 - One Kafka broker, one Postgres, one node: the drills test correctness after a crash, not high availability.
-- Scoring is offline. The streaming path writes features and rule flags to the lake, but nothing loads that lake into Postgres yet.
+- The streaming path writes features and rule flags to its own lake. Postgres can be rebuilt from it, but there is no continuous load, so serving is as fresh as the last rebuild.
 - One public provider's view of the mempool, with recorded gaps.
 - No labels, so no accuracy.
 

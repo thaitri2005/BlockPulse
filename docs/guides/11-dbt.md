@@ -56,6 +56,18 @@ Flagged transactions (large fan-ins, fan-outs and equal-output shapes) were conf
 
 `dbt source freshness` checks the newest `received_at` and `event_time` in the lake and warns after 2 hours. On recorded data it warns, as it should: the last session ended on 2026-10-19. It becomes meaningful with live collection, and DE5 adds the same signal as a Prometheus metric ([12](12-streaming-lake-and-metrics.md)).
 
+## Refreshing only some days
+
+`fct_hourly_activity` can be refreshed for named UTC days instead of rebuilt:
+
+```powershell
+.\.venv\Scripts\python.exe -m blockpulse dbt run --select fct_hourly_activity --vars '{dts: [\"2026-10-13\", \"2026-10-14\"]}'
+```
+
+With `dts` the model is *incremental*: dbt deletes those days' rows from the existing table and inserts them again (`delete+insert` on `dt`), leaving every other day untouched. Without it the model is a plain table, rebuilt in full, as before.
+
+Only this mart can do that safely, because an hour's row depends only on that hour's rows. `int_transaction_lifecycle` and `fct_transactions` need a transaction's whole history, which crosses days, so they are always rebuilt. Name every day a load touched: a capture that starts at 23:45 also writes rows into the next day, and `assert_hourly_matches_transactions` fails if a day was missed. The Airflow DAG still runs a full `dbt build`.
+
 ## Limits
 
 - Staging views re-read Parquet on every query; marts are tables, so dashboards and ad hoc queries should use the marts.
