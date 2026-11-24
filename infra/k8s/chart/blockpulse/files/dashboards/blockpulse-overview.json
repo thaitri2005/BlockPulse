@@ -110,7 +110,7 @@
       "id": 3,
       "type": "stat",
       "title": "Flag rate",
-      "description": "Share of scored transactions with at least one signal.",
+      "description": "Share of scored transactions with at least one rule signal. A rate of rule matches, not an accuracy or risk figure.",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "blockpulse-pg"
@@ -147,7 +147,8 @@
       },
       "fieldConfig": {
         "defaults": {
-          "unit": "percent"
+          "unit": "percent",
+          "decimals": 2
         },
         "overrides": []
       }
@@ -275,11 +276,63 @@
         "defaults": {
           "custom": {
             "drawStyle": "bars",
-            "fillOpacity": 60
+            "fillOpacity": 80,
+            "lineWidth": 0
           }
         },
-        "overrides": []
-      }
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "scored"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2a78d6"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Scored"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "flagged"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#eb6834"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Flagged"
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "description": "Transactions scored each minute, by receive time, and how many of them matched a rule."
     },
     {
       "id": 7,
@@ -314,7 +367,30 @@
         "legend": {
           "showLegend": false
         }
-      }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "#2a78d6"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "signals"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Signals"
+              }
+            ]
+          }
+        ]
+      },
+      "description": "How often each structural rule matched. One transaction can match more than one rule."
     },
     {
       "id": 8,
@@ -327,7 +403,7 @@
       "gridPos": {
         "x": 0,
         "y": 13,
-        "w": 8,
+        "w": 10,
         "h": 9
       },
       "description": "Latest evidence per transaction, as projected from stored lifecycle events.",
@@ -355,22 +431,111 @@
         "pieType": "donut",
         "legend": {
           "displayMode": "table",
-          "placement": "right"
+          "placement": "right",
+          "showLegend": true,
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "tooltip": {
+          "mode": "single"
         }
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "confirmed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#1baf7a"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Confirmed (mined)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "observed_unconfirmed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2a78d6"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Observed, unconfirmed"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "superseded"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#6250d6"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Superseded (replaced)"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "removed_unknown_reason"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#8a8a85"
+                }
+              },
+              {
+                "id": "displayName",
+                "value": "Removed, reason unknown"
+              }
+            ]
+          }
+        ]
       }
     },
     {
       "id": 9,
       "type": "table",
-      "title": "Latest alerts",
+      "title": "Latest flagged transactions",
       "datasource": {
         "type": "grafana-postgresql-datasource",
         "uid": "blockpulse-pg"
       },
       "gridPos": {
-        "x": 8,
+        "x": 10,
         "y": 13,
-        "w": 16,
+        "w": 14,
         "h": 9
       },
       "targets": [
@@ -383,10 +548,173 @@
           "format": "table",
           "rawQuery": true,
           "editorMode": "code",
-          "rawSql": "SELECT s.received_at, s.id, s.txid, (SELECT string_agg(x->>'rule_id', ', ') FROM jsonb_array_elements(s.signals) x) AS rules, (s.features->>'n_in')::int AS n_in, (s.features->>'n_out')::int AS n_out, t.lifecycle_status FROM scores s LEFT JOIN transactions t USING (txid) WHERE s.is_flagged AND $__timeFilter(s.received_at) ORDER BY s.received_at DESC, s.id DESC LIMIT 50"
+          "rawSql": "SELECT s.received_at, s.id, left(s.txid, 16) || '\u2026' AS txid, (SELECT string_agg(x->>'rule_id', ', ') FROM jsonb_array_elements(s.signals) x) AS rules, (s.features->>'n_in')::int AS n_in, (s.features->>'n_out')::int AS n_out, t.lifecycle_status FROM scores s LEFT JOIN transactions t USING (txid) WHERE s.is_flagged AND $__timeFilter(s.received_at) ORDER BY s.received_at DESC, s.id DESC LIMIT 50"
         }
       ],
-      "description": "Newest 50 flagged rows. Use GET /alerts/{id} for the full explanation."
+      "description": "Newest 50 rows that matched a rule. A flag describes structure only. GET /alerts/{id} on the API returns the full explanation; GET /tx/{txid} returns everything stored for a transaction.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "received_at"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Received (UTC)"
+              },
+              {
+                "id": "custom.width",
+                "value": 170
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "id"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Alert id"
+              },
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "txid"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Transaction"
+              },
+              {
+                "id": "custom.width",
+                "value": 165
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rules"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Rules matched"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "n_in"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Inputs"
+              },
+              {
+                "id": "custom.width",
+                "value": 75
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "n_out"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Outputs"
+              },
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "lifecycle_status"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Status"
+              },
+              {
+                "id": "custom.width",
+                "value": 125
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "confirmed": {
+                        "text": "Confirmed",
+                        "color": "#1baf7a",
+                        "index": 0
+                      },
+                      "observed_unconfirmed": {
+                        "text": "Unconfirmed",
+                        "color": "#2a78d6",
+                        "index": 1
+                      },
+                      "superseded": {
+                        "text": "Superseded",
+                        "color": "#6250d6",
+                        "index": 2
+                      },
+                      "removed_unknown_reason": {
+                        "text": "Removed",
+                        "color": "#8a8a85",
+                        "index": 3
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      }
+    }
+  ],
+  "links": [
+    {
+      "title": "Pipeline health",
+      "type": "link",
+      "url": "/d/blockpulse-pipeline",
+      "icon": "dashboard",
+      "targetBlank": false,
+      "keepTime": false
     }
   ]
 }

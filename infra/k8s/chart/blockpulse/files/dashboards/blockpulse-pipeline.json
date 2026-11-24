@@ -17,8 +17,8 @@
     {
       "id": 1,
       "type": "stat",
-      "title": "Sink up",
-      "description": "1 when Prometheus can scrape the kafka-lake sink.",
+      "title": "Stream sink",
+      "description": "Whether Prometheus can scrape the kafka-lake sink. DOWN means the process is gone or unreachable, not that it is idle.",
       "datasource": {
         "type": "prometheus",
         "uid": "blockpulse-prom"
@@ -26,7 +26,7 @@
       "gridPos": {
         "x": 0,
         "y": 0,
-        "w": 6,
+        "w": 5,
         "h": 5
       },
       "targets": [
@@ -49,7 +49,7 @@
           "values": false
         },
         "colorMode": "background",
-        "graphMode": "area"
+        "graphMode": "none"
       },
       "fieldConfig": {
         "defaults": {
@@ -66,7 +66,22 @@
                 "value": 1
               }
             ]
-          }
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "1": {
+                  "text": "UP",
+                  "index": 0
+                },
+                "0": {
+                  "text": "DOWN",
+                  "index": 1
+                }
+              }
+            }
+          ]
         },
         "overrides": []
       }
@@ -81,9 +96,9 @@
         "uid": "blockpulse-prom"
       },
       "gridPos": {
-        "x": 6,
+        "x": 5,
         "y": 0,
-        "w": 6,
+        "w": 5,
         "h": 5
       },
       "targets": [
@@ -132,15 +147,15 @@
       "id": 3,
       "type": "stat",
       "title": "Newest event age",
-      "description": "Seconds since the newest event was received. Grows when data stops arriving (alert above 10 min). High during a replay of old data.",
+      "description": "Time since the newest event the sink has seen was received. It grows when the feed stops, and it starts high after replaying an old capture. Alert after 10 minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "blockpulse-prom"
       },
       "gridPos": {
-        "x": 12,
+        "x": 10,
         "y": 0,
-        "w": 6,
+        "w": 5,
         "h": 5
       },
       "targets": [
@@ -176,6 +191,10 @@
                 "value": null
               },
               {
+                "color": "yellow",
+                "value": 300
+              },
+              {
                 "color": "red",
                 "value": 600
               }
@@ -195,9 +214,9 @@
         "uid": "blockpulse-prom"
       },
       "gridPos": {
-        "x": 18,
+        "x": 15,
         "y": 0,
-        "w": 6,
+        "w": 5,
         "h": 5
       },
       "targets": [
@@ -243,10 +262,66 @@
       }
     },
     {
+      "id": 9,
+      "type": "stat",
+      "title": "Alerts firing",
+      "description": "Alert rules currently firing in Prometheus. Pending rules (condition true, waiting out their 'for' window) are not counted.",
+      "gridPos": {
+        "x": 20,
+        "y": 0,
+        "w": 4,
+        "h": 5
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "blockpulse-prom"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "count(ALERTS{alertstate=\"firing\"}) or vector(0)",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "blockpulse-prom"
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        }
+      }
+    },
+    {
       "id": 5,
       "type": "timeseries",
       "title": "Throughput",
-      "description": "",
+      "description": "Messages read from the enriched topic and micro-batches written, per second.",
       "datasource": {
         "type": "prometheus",
         "uid": "blockpulse-prom"
@@ -282,13 +357,14 @@
           "unit": "ops"
         },
         "overrides": []
-      }
+      },
+      "options": {}
     },
     {
       "id": 6,
       "type": "timeseries",
       "title": "Rows written per second",
-      "description": "",
+      "description": "Rows written to each lake table per second, after the quality gate.",
       "datasource": {
         "type": "prometheus",
         "uid": "blockpulse-prom"
@@ -315,13 +391,14 @@
           "unit": "rowsps"
         },
         "overrides": []
-      }
+      },
+      "options": {}
     },
     {
       "id": 7,
       "type": "timeseries",
       "title": "Consumer lag",
-      "description": "",
+      "description": "Messages the sink still has to read. The alert fires above 1,000 for two minutes.",
       "datasource": {
         "type": "prometheus",
         "uid": "blockpulse-prom"
@@ -345,16 +422,35 @@
       ],
       "fieldConfig": {
         "defaults": {
-          "unit": "none"
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1000
+              }
+            ]
+          },
+          "custom": {
+            "thresholdsStyle": {
+              "mode": "dashed"
+            }
+          }
         },
         "overrides": []
-      }
+      },
+      "options": {}
     },
     {
       "id": 8,
       "type": "timeseries",
       "title": "Time between batch flushes (p50 / p95)",
-      "description": "",
+      "description": "How long the sink waits between writing batches. The target is 5 seconds; long gaps mean it is idle or stuck.",
       "datasource": {
         "type": "prometheus",
         "uid": "blockpulse-prom"
@@ -390,7 +486,18 @@
           "unit": "s"
         },
         "overrides": []
-      }
+      },
+      "options": {}
+    }
+  ],
+  "links": [
+    {
+      "title": "Data overview",
+      "type": "link",
+      "url": "/d/blockpulse-overview",
+      "icon": "dashboard",
+      "targetBlank": false,
+      "keepTime": false
     }
   ]
 }
