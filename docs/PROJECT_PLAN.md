@@ -1,6 +1,6 @@
 # BlockPulse: plan and status
 
-Last updated 2026-10-20. This is the working plan: purpose, what's done, what's next, the decisions behind it, and the known limits. The original long-form design (2026-10-08) is kept in [archive/original-design.md](archive/original-design.md); where it disagrees with what was built, [ARCHITECTURE.md](ARCHITECTURE.md) and the guides are current.
+Last updated 2026-11-24. This is the working plan: purpose, what's done, what's next, the decisions behind it, and the known limits. The original long-form design (2026-10-08) is kept in [archive/original-design.md](archive/original-design.md); where it disagrees with what was built, [ARCHITECTURE.md](ARCHITECTURE.md) and the guides are current.
 
 ## 1. Purpose
 
@@ -29,9 +29,9 @@ What the project will not claim:
 | DE4 · dbt on the lake | Done | 8 models, 28 tests, `dbt build` in 1.5 min on 2.65 M transactions; marts reproduce the shared queries exactly and agree with Postgres on every status ([11](guides/11-dbt.md)) |
 | DE5 · Streaming into the lake, with metrics | Done | `kafka-lake` sink: 13,707 messages to 207,913 transactions and 466,920 events, row-for-row identical to the batch lake; Prometheus metrics, 4 alert rules, Grafana pipeline dashboard ([12](guides/12-streaming-lake-and-metrics.md)) |
 | DE6 · Airflow orchestration | Done | DAG per UTC day (screen, lake, load, dbt build) with retries and a one-slot pool; a 3-day backfill equals the direct run row for row in the lake, the marts and Postgres; a Postgres outage recovered by retry; four real failures found and fixed ([13](guides/13-airflow.md)) |
-| DE7 | Staged | See the roadmap |
+| DE7 · Kubernetes | In progress | DE7a done: a k3d cluster that runs pods, created by one script, including inside a restricted cloud container ([14](guides/14-kubernetes.md), [log](experiments/2026-11-24-de7-kubernetes.md)). DE7b–d staged |
 
-Tests (2026-10-20): 154 passed and 2 skips (one Linux-only) with the Postgres test database; Terraform 9 of 9 with a mocked provider; Amazon Linux 2023 container rehearsals all pass; CI green.
+Tests (2026-10-20): 154 passed and 2 skips (one Linux-only) with the Postgres test database; Terraform 9 of 9 with a mocked provider; Amazon Linux 2023 container rehearsals all pass; CI green. Rechecked 2026-11-24 on Linux after a five-week pause: 155 passed, 1 skipped, lint clean, lock unchanged.
 
 ## 3. Roadmap
 
@@ -67,7 +67,7 @@ The audit after DE3 found that the serving layer held 16,770 of 2.65 M rows, loa
 | **DE4 · dbt on the lake** | dbt-duckdb over the lake: staging, intermediate lifecycle, marts, tests, docs and lineage, `dbt build` in CI | `dbt build` green locally and in CI; marts reproduce the shared queries | Laptop | **Done** 2026-10-20 ([11](guides/11-dbt.md)) |
 | **DE5 · One pipeline: streaming into the lake, with metrics** | A Kafka consumer that writes the enriched topic into the same lake tables (hourly files, same contract and quality gate) instead of one Parquet file per message; Prometheus metrics (consumer lag, throughput, error and quarantine rates, data freshness) scraped by Prometheus in the `m2` profile and charted in Grafana; alert rules for lag and freshness | Lake built from the stream equals the lake built from files for the same sessions (row-level check); dashboards show lag and freshness live during a replay | Laptop for build and short replays | **Done** 2026-10-20 ([12](guides/12-streaming-lake-and-metrics.md)) |
 | **DE6 · Airflow orchestration** | A DAG per date partition: process, screen, lake, load, dbt build; retries; a demonstrated backfill of past dates; runs in the existing Compose stack | A backfill of 3 past days produces the same lake and marts as the direct run; a deliberately failed task retries and recovers | Laptop | **Done** 2026-10-20 ([13](guides/13-airflow.md)) |
-| **DE7 · Kubernetes** | k3d cluster; a Helm chart for Kafka (Strimzi or Redpanda), Postgres (StatefulSet with a volume), API, Grafana; probes, requests and limits; the drills rerun as pod kills | Chart installs from scratch; pod-kill drills pass with the same invariants as [10](guides/10-failure-drills.md) | Laptop (short); optional k3s-on-EC2 demo on AWS, then destroy | 2–3 sessions |
+| **DE7 · Kubernetes** | k3d cluster; a Helm chart for Kafka (Strimzi or Redpanda), Postgres (StatefulSet with a volume), API, Grafana; probes, requests and limits; the drills rerun as pod kills | Chart installs from scratch; pod-kill drills pass with the same invariants as [10](guides/10-failure-drills.md) | Cloud session or laptop (D30); optional k3s-on-EC2 demo on AWS, then destroy | **In progress**: DE7a done 2026-11-24 ([14](guides/14-kubernetes.md)) |
 
 ### Optional, not scheduled
 
@@ -83,9 +83,14 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 
 **Next session:**
 
-1. DE7: Kubernetes (k3d, Helm) with the drills rerun as pod kills. Ask first: it adds k3d and Helm, and the laptop has 16 GB.
-2. Optional, small: hourly compaction of the streamed lake's small files; incremental dbt models so a daily run rebuilds only its day.
-3. Optional: run the Airflow DAG on the AWS instance instead of the laptop (it sleeps; see [13](guides/13-airflow.md)).
+1. Start the environment: `K3D_CA_BUNDLE=/root/.ccr/ca-bundle.crt bash infra/k8s/cluster-up.sh` in a cloud session (plain `bash infra/k8s/cluster-up.sh` on the laptop). Tools and versions are in [14](guides/14-kubernetes.md).
+2. DE7b: the Helm chart in `infra/k8s/chart/blockpulse/`, starting with Postgres and Kafka as StatefulSets with volumes, probes, requests and limits.
+3. DE7c: the BlockPulse image, migrations as a Job, API, enrichment worker and Grafana.
+4. DE7d: the drills rerun as pod kills, with the same invariants as [10](guides/10-failure-drills.md).
+5. Optional, small: hourly compaction of the streamed lake's small files; incremental dbt models so a daily run rebuilds only its day.
+6. Optional: run the Airflow DAG on the AWS instance instead of the laptop (it sleeps; see [13](guides/13-airflow.md)).
+
+The running record of DE7 is [experiments/2026-11-24-de7-kubernetes.md](experiments/2026-11-24-de7-kubernetes.md).
 
 ## 4. Decisions
 
@@ -116,6 +121,8 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 | D26 | Metrics go to Prometheus from a per-process registry; labels are table names only | 2026-10-20: low cardinality; alert rules use `for` windows so a catching-up replay doesn't fire |
 | D27 | Airflow orchestrates the CLI; it doesn't contain pipeline logic. BlockPulse runs from its own venv in the Airflow image, metadata is SQLite, the unit of work is one UTC day of capture starts (`process-pending --date`), and a one-slot pool guards the data root | 2026-10-20: one implementation for every runner (D15); Airflow's dependencies never mix with the lock; a pool also covers backfill runs, which `max_active_runs` doesn't |
 | D28 | A processing lock is stale when its process is gone (same host) or it is 3 h old, and SIGTERM exits through cleanup | 2026-10-20: a task killed by Airflow after the laptop slept left its lock and blocked every retry |
+| D29 | Kafka on Kubernetes is a plain StatefulSet running the same `apache/kafka` image as Compose, not Strimzi or Redpanda | 2026-11-24: the drills must compare like with like (same broker, same version); an operator adds custom resources and about 0.5 GB without changing what the drills prove. Revisit if the goal becomes learning operators |
+| D30 | DE7 is developed in an ephemeral cloud session on generated or fixture data; every step is pushed | 2026-11-24: the session has the same memory as the laptop with nothing competing for it; the recorded dataset stays on the laptop, so DE7 numbers are labelled with their data |
 | D23 | Finished raw captures are gzipped in place; all readers accept either form | 2026-10-20: raw was 62% of disk; gzip is 5.4x smaller, stdlib only, byte-identical on read |
 
 ## 5. Risks and limits
@@ -128,6 +135,7 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 | Disk: about 4–5 GB a day of collection | Free-space guard (stops below 15 GiB); compaction; raw stays as source of truth |
 | Dependency drift (system numpy changed between two runs before the lock) | Hashed lock, isolated venv, CI lock check; models record library versions |
 | A cloud run keeps billing | Deadline poweroff, budget alert, bucket expiry, teardown checklist ([08](guides/08-aws.md)) |
+| A restricted host breaks nested containers (untrusted proxy CA, `oom_score_adj` writes refused) | `cluster-up.sh` mounts a CA on request and installs a runc shim only when it detects the restriction ([14](guides/14-kubernetes.md)) |
 | Too many services slow delivery | Compose profiles; stop what isn't in use |
 | The laptop sleeps during long runs (standby froze Docker for 54 min mid-load and Airflow killed the task) | Minute-scale jobs only on the laptop (D21); a killed task no longer blocks its retries (D28) |
 | Postgres incremental loads slow as indexes outgrow its 512 MB container | Hourly loads stay small; backfills use `serving-rebuild` |

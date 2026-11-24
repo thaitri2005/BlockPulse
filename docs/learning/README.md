@@ -38,6 +38,7 @@ Each exercise is sized for one sitting of about 30-60 minutes. Stop when a conce
 | 22 | Exactly-once output from an at-least-once stream | Micro-batches, offset-named files, commit after write, why replay must delete by offset range | `stream_lake.py` → `stream_to_lake()`, `_remove_replayed()`; `tests/test_stream_lake.py` | To write together |
 | 23 | Metrics and alerts | Counters vs gauges vs histograms, label cardinality, `rate()`, pending vs firing | `metrics.py`; `observability/prometheus/alerts.yml`; [streaming guide](../guides/12-streaming-lake-and-metrics.md) | To write together |
 | 24 | Orchestration: DAGs, retries, backfills | Data intervals, idempotent tasks, retries with backoff, pools vs `max_active_runs`, why a killed task must release its lock | `orchestration/airflow/dags/blockpulse_daily.py`; `collector.py` → `_Lock`; [Airflow guide](../guides/13-airflow.md) | To write together |
+| 25 | A cluster on your own machine | Clusters, nodes, pods, contexts; declared state vs started processes; debugging a pod that won't start from its events | `infra/k8s/k3d.yaml`, `infra/k8s/cluster-up.sh`; [Kubernetes guide](../guides/14-kubernetes.md) | To write together |
 
 ## Exercise outlines
 
@@ -54,6 +55,8 @@ These are starting points, not finished walkthroughs. We turn one into a full pa
 **6. Consumers and restarts.** Run `kafka-archive` with a group ID, stop it with Ctrl+C partway through, then run it again with the same group. Then try a *new* group ID. Question to answer: when is an offset committed, and what would go wrong if we committed before writing the file?
 
 **7. Enrichment under a budget.** Read the mocked tests in `tests/test_enrichment.py` before the code. Question to answer: why must adding more enrichment workers *not* increase the request rate to the public API?
+
+**25. A cluster on your own machine.** Run `cluster-up.sh`, then `kubectl get pods -A` and name what each system pod is for. Start a throwaway pod (`kubectl run probe --image=postgres:17 --env=POSTGRES_PASSWORD=x`), read its events with `kubectl describe pod probe`, then delete it. Question to answer: you deleted a pod started with `kubectl run` and it stayed gone; why will a pod created by a StatefulSet come back?
 
 ## Useful commands while learning
 

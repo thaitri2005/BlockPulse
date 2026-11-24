@@ -1,0 +1,21 @@
+# The local Kubernetes cluster for DE7: one k3s node running as a Docker container (k3d).
+# Create it with infra/k8s/cluster-up.sh (or `k3d cluster create --config infra/k8s/k3d.yaml`).
+apiVersion: k3d.io/v1alpha5
+kind: Simple
+metadata:
+  name: blockpulse
+servers: 1
+agents: 0
+image: rancher/k3s:v1.31.5-k3s1
+options:
+  k3d:
+    wait: true
+    timeout: 300s
+  k3s:
+    extraArgs:
+      # No ingress controller or load balancer: services are reached with `kubectl port-forward`, which keeps
+      # everything on 127.0.0.1 and saves about 150 MB.
+      - arg: --disable=traefik
+        nodeFilters: [server:*]
+      - arg: --disable=servicelb
+        nodeFilters: [server:*]
