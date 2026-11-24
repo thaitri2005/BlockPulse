@@ -6,7 +6,7 @@ Started 2026-11-24, after a five-week pause (last commit 2026-10-20). This file 
 
 DE7 is being built in a cloud development session, not on the laptop: a Linux container with 4 CPUs, 15.7 GiB of memory, no swap, 61 GB of free disk and Docker. The container is ephemeral, so:
 
-- Only what is committed and pushed survives. Work is pushed after every step to the branch `claude/gallant-ptolemy-866nd6`.
+- Only what is committed and pushed survives. Work is pushed to `main` after every step, authored as the owner.
 - The 2.65 M-transaction dataset (`data/`, git-ignored, on the laptop) is not here. Everything in DE7 runs on generated or fixture data, and the numbers below say so.
 - The cluster, images and tools are rebuilt at the start of each session (`bash infra/k8s/cluster-up.sh`).
 
@@ -85,4 +85,4 @@ The 1.4 GiB total is well under the 3–4 GB estimated before starting; the esti
 
 Tests after DE7c: `tests/test_helm_chart.py` has 11 tests; full suite 166 passed, 1 skipped; `helm lint --strict`, ruff and shellcheck clean.
 
-Not verified: the CI run. The shellcheck step now includes `infra/k8s/*.sh`, and the chart tests run in the Python job if the runner has `helm` (GitHub's Ubuntu images normally do), and CI runs only on `main` and on pull requests, so the branch push did not trigger it. Also not done: a build of the image without the proxy settings, which is the path the laptop will take.
+Not verified: the CI run. The shellcheck step now includes `infra/k8s/*.sh`, and the chart tests run in the Python job if the runner has `helm` (GitHub's Ubuntu images normally do), The first push to `main` (2026-11-24) triggers CI; check that run. Also not done: a build of the image without the proxy settings, which is the path the laptop will take.
