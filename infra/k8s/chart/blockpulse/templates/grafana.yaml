@@ -35,6 +35,12 @@ data:
           timescaledb: false
         secureJsonData:
           password: ${POSTGRES_PASSWORD}
+      - name: Prometheus
+        uid: blockpulse-prom
+        type: prometheus
+        access: proxy
+        url: http://{{ include "blockpulse.name" (dict "root" . "component" "prometheus") }}:9090
+        isDefault: false
   dashboards.yaml: |
     apiVersion: 1
     providers:

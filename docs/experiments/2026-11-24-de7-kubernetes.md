@@ -155,9 +155,29 @@ Restarting the cluster showed one bug: `cluster-up.sh` failed its first `kubectl
 
 Raw output: [`reports/de7-run1/`](reports/de7-run1/) and [`reports/de7-run2/`](reports/de7-run2/) hold the JSON report of every run; run 2 also has the console output.
 
+## Chart extended: stream sink, Prometheus, pipeline dashboard
+
+Added so the whole streaming path runs in the cluster. Data: 20,000 generated messages (one session, seed 1), 80,000 transactions.
+
+| Step | Result |
+| --- | --- |
+| Upgrade the existing release with the sink and Prometheus | 23 s; 9 pods |
+| Publish 20,000 messages, scale the worker to 1 | Both consumer groups at lag 0 when checked after 60 s |
+| Sink output | 84 Parquet files over two hours of event time, 0 quarantined |
+| Prometheus | `up` 1; 20,000 messages; 80,000 rows per table; lag 0; `DataStale` pending (the generated events are dated 2026-01-01), the other three rules inactive |
+| Grafana | "BlockPulse overview" and "BlockPulse pipeline health" provisioned; both datasources healthy |
+| `lake-compact` inside the sink pod | Closed hour: 30 files to 1 per table, 57,596 rows each, 0 duplicates dropped; open hour skipped; 26 files remain |
+| `serving-rebuild --lake` inside the sink pod | 80,000 scores, events and transactions; 8.1 s |
+| API | `/pipeline/status`: 80,000 transactions, 12,714 flagged |
+| Memory after the run (`kubectl top`) | Pods 1,136 Mi (Kafka 499, sink 369, Grafana 89, worker 62, API 39 + 38, Prometheus 21, Postgres 19); node 1,814 Mi |
+
+**A deadlock on fresh installs, found by rerunning a drill.** The upgrade above worked because the topics already existed. The next `k8s-enrich-kill`, which installs into an empty namespace, timed out after 8 minutes with `bp-sink-0` in `CrashLoopBackOff`: `Subscribed topic not available: blockpulse.enriched.v1`. The topics Job is a post-install hook, and with `--wait` Helm runs hooks only after every pod is ready; the sink needed the topics to become ready, so neither could finish. The sink and the worker now create the topics in an init container. Rerun: passed 7 of 7, install 21.7 s, 11,500 offsets committed at the kill, replacement pod after 2.4 s, 417 duplicates absorbed ([report](reports/de7-run3/)).
+
+**A defect in the generator, found while writing exercise 19.** `synth-capture` wrote a summary without `started_at`, `elapsed_seconds`, `stop_reason` and `connection_errors`, so the lake quarantined each generated session's `capture_sessions` row and a plain `dbt build` failed on generated data. The drills had not noticed because they never read that table. The generator now writes the same fields as a recorded capture, and a test runs a generated session through the batch path with nothing quarantined.
+
 ## What DE7 did not cover
 
 - Each drill ran twice, in the cloud session, on synthetic traffic. Nothing here was run on the laptop or on recorded sessions.
-- CI does not create a cluster, so the drills and a real chart install are not part of CI.
+- CI creates a cluster and runs the worker drill on every push; the broker and Postgres drills run only by hand.
 - The image was built only behind the session's proxy.
-- Prometheus, the pipeline dashboard and Airflow are still Compose-only.
+- Airflow is still Compose-only.

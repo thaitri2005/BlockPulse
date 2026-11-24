@@ -30,9 +30,9 @@ The roadmap (milestones M0–M3 and steps DE1–DE7) is complete.
 | dbt models and tests; the hourly mart refreshable by day | Done | [11](guides/11-dbt.md) |
 | Streaming into the lake, metrics, alerts, compaction, serving from the streamed lake | Done; compaction and stream serving tested on fixtures only | [12](guides/12-streaming-lake-and-metrics.md) |
 | Airflow orchestration | Done | [13](guides/13-airflow.md) |
-| Kubernetes: cluster, Helm chart, pod-kill drills | Done on generated traffic in a cloud session (two logged runs of each drill). Open: a run on the laptop | [14](guides/14-kubernetes.md) |
+| Kubernetes: cluster, Helm chart for the whole streaming and serving path, pod-kill drills | Done on generated traffic, in a cloud session and in CI. Open: a run on the laptop | [14](guides/14-kubernetes.md) |
 
-Checks on 2026-11-24 (Linux, Python 3.12): 179 tests passed and 1 skipped; ruff, shellcheck and `helm lint --strict` clean; CI green on `main`. On Windows without `helm` the 11 chart tests skip.
+Checks on 2026-11-24 (Linux, Python 3.12): 190 tests passed and 1 skipped; ruff, shellcheck and `helm lint --strict` clean. On Windows without `helm` the 14 chart tests skip.
 
 ## 3. What could come next
 
@@ -41,10 +41,9 @@ Nothing is scheduled. Candidates, roughly by value for learning:
 | Item | Why | Runs on |
 | --- | --- | --- |
 | Run the Kubernetes quick start and drills on the laptop | The image and scripts have only run behind a cloud session's proxy | Laptop |
-| CI job that creates a k3d cluster, installs the chart and runs one drill | The chart and drills are not exercised in CI | GitHub Actions |
-| Prometheus, the pipeline dashboard and the stream sink in the Helm chart | They run only under Compose | Cloud session or laptop |
 | Schedule `lake-compact` and time it, and `serving-rebuild --lake`, on recorded traffic | Both exist and are tested on fixtures only | Laptop |
 | A continuous load from the stream into Postgres | Serving from the streamed lake is a full rebuild | Laptop |
+| Schedule compaction and the serving rebuild in the cluster (a CronJob) | They are run by hand with `kubectl exec` | Cloud session or laptop |
 | Airflow on the AWS instance | The laptop sleeps and misses scheduled runs | AWS, deployed by the owner |
 | Hand-labelled sample (about 200 flagged rows, using the review rubric) | The only route to any accuracy figure | Laptop |
 | Fee feature relative to the hour's median | The model's measured blind spot (new `FEATURE_SET_VERSION`) | Laptop |

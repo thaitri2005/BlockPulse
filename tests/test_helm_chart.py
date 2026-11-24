@@ -10,7 +10,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-CHART = Path(__file__).resolve().parents[1] / "infra" / "k8s" / "chart" / "blockpulse"
+REPO = Path(__file__).resolve().parents[1]
+CHART = REPO / "infra" / "k8s" / "chart" / "blockpulse"
 pytestmark = pytest.mark.skipif(shutil.which("helm") is None, reason="helm is not installed")
 
 
@@ -155,11 +156,57 @@ def test_grafana_reads_postgres_through_the_secret_and_ships_the_repository_dash
     assert datasources["datasources"][0]["url"] == "bp-postgres:5432"
     assert datasources["datasources"][0]["secureJsonData"]["password"] == "${POSTGRES_PASSWORD}"
 
-    # Helm can only read files inside the chart, so the dashboard is a copy. It must stay identical to the one
-    # Compose mounts, and what the ConfigMap carries must be that file.
-    source = CHART.parents[3] / "observability" / "grafana" / "dashboards" / "blockpulse-overview.json"
-    copy = CHART / "files" / "dashboards" / "blockpulse-overview.json"
-    assert copy.read_bytes() == source.read_bytes(), "copy observability/grafana/dashboards/blockpulse-overview.json into the chart"
+    assert [d["uid"] for d in datasources["datasources"]] == ["blockpulse-pg", "blockpulse-prom"]
+    assert datasources["datasources"][1]["url"] == "http://bp-prometheus:9090"
+
+    # Helm can only read files inside the chart, so the dashboards are copies. They must stay identical to the
+    # ones Compose mounts, and what the ConfigMap carries must be those files.
     rendered = _one(docs, "ConfigMap", "bp-grafana-dashboards")["data"]
-    assert list(rendered) == ["blockpulse-overview.json"]
-    assert json.loads(rendered["blockpulse-overview.json"]) == json.loads(source.read_text(encoding="utf-8"))
+    assert sorted(rendered) == ["blockpulse-overview.json", "blockpulse-pipeline.json"]
+    for name in rendered:
+        source = REPO / "observability" / "grafana" / "dashboards" / name
+        copy = CHART / "files" / "dashboards" / name
+        assert copy.read_bytes() == source.read_bytes(), f"copy observability/grafana/dashboards/{name} into the chart"
+        assert json.loads(rendered[name]) == json.loads(source.read_text(encoding="utf-8"))
+
+
+def test_sink_keeps_its_lake_on_a_volume_and_exposes_metrics():
+    docs = _render()
+    sink = _one(docs, "StatefulSet", "bp-sink")
+    (container,) = _pod_spec(sink)["containers"]
+    assert sink["spec"]["replicas"] == 1 and sink["spec"]["serviceName"] == "bp-sink"
+    assert {c["metadata"]["name"] for c in sink["spec"]["volumeClaimTemplates"]} == {"lake"}
+    assert container["volumeMounts"] == [{"name": "lake", "mountPath": "/data"}]
+    assert _pod_spec(sink)["securityContext"]["fsGroup"] == 10001  # the unprivileged user can write the volume
+    assert {"kafka-lake", "--lake=/data/lake-stream", "--group-id=blockpulse-stream-lake",
+            "--bootstrap-servers=bp-kafka-0.bp-kafka:9092", "--metrics-port=9108"} <= set(container["args"])
+    assert container["livenessProbe"]["httpGet"]["path"] == "/metrics"
+    assert container["resources"]["limits"]["memory"]
+
+    refused = subprocess.run(["helm", "template", "bp", str(CHART), "--set", "sink.replicas=2"], capture_output=True, text=True)
+    assert refused.returncode != 0 and "sink.replicas must be 0 or 1" in refused.stderr
+
+
+def test_prometheus_scrapes_the_sink_under_the_job_name_the_alerts_use():
+    docs = _render()
+    config = _one(docs, "ConfigMap", "bp-prometheus")["data"]
+    scrape = yaml.safe_load(config["prometheus.yml"])["scrape_configs"]
+    assert scrape == [{"job_name": "blockpulse-stream-lake", "static_configs": [{"targets": ["bp-sink-0.bp-sink:9108"]}]}]
+    # The alert rules are a copy of the ones Compose mounts; they refer to that job name.
+    source = REPO / "observability" / "prometheus" / "alerts.yml"
+    copy = CHART / "files" / "prometheus" / "alerts.yml"
+    assert copy.read_bytes() == source.read_bytes(), "copy observability/prometheus/alerts.yml into the chart"
+    assert yaml.safe_load(config["alerts.yml"]) == yaml.safe_load(source.read_text(encoding="utf-8"))
+    assert 'up{job="blockpulse-stream-lake"}' in config["alerts.yml"]
+    (container,) = _pod_spec(_one(docs, "Deployment", "bp-prometheus"))["containers"]
+    assert container["readinessProbe"]["httpGet"]["path"] == "/-/ready"
+
+
+def test_topic_consumers_create_their_topics_before_starting():
+    """The topics Job is a post-install hook, which with --wait runs only after every pod is ready. A consumer that
+    needs the topics to become ready would deadlock a fresh install, so each one creates them in an init container."""
+    docs = _render("--set", "worker.replicas=1")
+    for workload in (_one(docs, "StatefulSet", "bp-sink"), _one(docs, "Deployment", "bp-worker")):
+        (init,) = _pod_spec(workload)["initContainers"]
+        assert init["args"] == ["kafka-init", "--bootstrap-servers", "bp-kafka-0.bp-kafka:9092"]
+        assert init["image"] == "blockpulse:dev" and init["securityContext"]["runAsNonRoot"] is True

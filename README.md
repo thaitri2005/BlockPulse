@@ -74,7 +74,7 @@ One implementation, several runners. The pipeline logic lives in the `blockpulse
 | Docker Compose | Kafka, Postgres, Grafana, Prometheus and Airflow as local services | [03](docs/guides/03-kafka.md), [04](docs/guides/04-postgres-api-dashboard.md) |
 | Airflow | One DAG run per UTC day: screen, lake, load, `dbt build`, with retries and backfills | [13](docs/guides/13-airflow.md) |
 | AWS (Terraform) | A locked-down EC2 instance that collects for a fixed time, uploads to S3 and powers itself off; Glue and Athena over the lake | [08](docs/guides/08-aws.md) |
-| Kubernetes (k3d, Helm) | The serving stack as pods: Postgres and Kafka with persistent volumes, the API, the worker and Grafana | [14](docs/guides/14-kubernetes.md) |
+| Kubernetes (k3d, Helm) | Everything downstream of capture as pods: Kafka, the worker, the stream sink, Postgres, the API, Prometheus and Grafana | [14](docs/guides/14-kubernetes.md) |
 
 ```mermaid
 flowchart LR
@@ -85,22 +85,28 @@ flowchart LR
     k8s["Kubernetes<br/>Deployments and Jobs"] --> cli
 ```
 
-On Kubernetes the serving stack looks like this. Each box is recreated by its controller if the pod is deleted, which is what the failure drills test.
+On Kubernetes everything downstream of capture looks like this. Each box is recreated by its controller if the pod is deleted, which is what the failure drills test.
 
 ```mermaid
 flowchart TB
     subgraph ns ["namespace blockpulse (one Helm release)"]
         jobs["Jobs after each install:<br/>migrations, topics"]
-        api["API<br/>Deployment, 2 pods"]
         worker["Enrichment worker<br/>Deployment, 0 or 1 pod"]
-        grafana["Grafana<br/>Deployment"]
-        pg[("Postgres<br/>StatefulSet + volume")]
         kafka[("Kafka<br/>StatefulSet + volume")]
+        sink[("Stream sink<br/>StatefulSet + lake volume")]
+        pg[("Postgres<br/>StatefulSet + volume")]
+        api["API<br/>Deployment, 2 pods"]
+        prom["Prometheus<br/>Deployment"]
+        grafana["Grafana<br/>Deployment"]
         jobs --> pg
         jobs --> kafka
+        worker <--> kafka
+        kafka --> sink
+        sink -. "rebuild" .-> pg
+        prom -- scrapes --> sink
         api --> pg
         grafana --> pg
-        worker <--> kafka
+        grafana --> prom
     end
 ```
 

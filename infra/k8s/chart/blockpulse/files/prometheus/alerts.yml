@@ -1,0 +1,23 @@
+# Alert rules for the streaming lake sink. They fire in Prometheus (Status > Alerts); no notifications are wired up.
+groups:
+  - name: blockpulse
+    rules:
+      - alert: StreamLakeDown
+        expr: up{job="blockpulse-stream-lake"} == 0
+        for: 1m
+        annotations:
+          summary: The kafka-lake sink isn't reachable for scraping.
+      - alert: ConsumerFallingBehind
+        expr: blockpulse_consumer_lag_messages > 1000
+        for: 2m
+        annotations:
+          summary: The lake sink is more than 1,000 messages behind the enriched topic for 2 minutes.
+      - alert: DataStale
+        expr: blockpulse_newest_event_age_seconds > 600
+        for: 5m
+        annotations:
+          summary: No new mempool events for over 10 minutes (the live feed delivers about one message a second).
+      - alert: RowsQuarantined
+        expr: increase(blockpulse_rows_quarantined_total[10m]) > 0
+        annotations:
+          summary: Rows failed the lake contract in the last 10 minutes; see data/lake/_quarantine.

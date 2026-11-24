@@ -34,3 +34,20 @@ securityContext:
   allowPrivilegeEscalation: false
   capabilities: {drop: ["ALL"]}
 {{- end -}}
+
+
+{{/*
+An init container that creates the Kafka topics if they are missing, for every pod that consumes one.
+The kafka-init Job can't do this for them: it is a post-install hook, so with --wait it runs only after every pod
+is ready, and a consumer that crashes on a missing topic never becomes ready. That deadlock is why a fresh install
+of the sink timed out. An init container runs before its pod's main container and is retried until it succeeds,
+so it also waits for the broker. Creating topics is idempotent.
+*/}}
+{{- define "blockpulse.topicsInit" -}}
+- name: topics
+  {{- include "blockpulse.appContainer" . | nindent 2 }}
+  args: ["kafka-init", "--bootstrap-servers", {{ include "blockpulse.kafkaBootstrap" . | quote }}]
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 256Mi}
+{{- end -}}

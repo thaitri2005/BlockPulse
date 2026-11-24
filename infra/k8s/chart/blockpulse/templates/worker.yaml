@@ -22,6 +22,8 @@ spec:
     spec:
       # SIGTERM lets the worker commit its offsets; after this many seconds it is killed.
       terminationGracePeriodSeconds: 30
+      initContainers:
+        {{- include "blockpulse.topicsInit" . | nindent 8 }}
       containers:
         - name: worker
           {{- include "blockpulse.appContainer" . | nindent 10 }}

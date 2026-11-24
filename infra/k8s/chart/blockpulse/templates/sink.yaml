@@ -1,0 +1,79 @@
+{{- $ctx := dict "root" . "component" "sink" -}}
+{{- $name := include "blockpulse.name" $ctx -}}
+{{- if gt (int .Values.sink.replicas) 1 }}
+{{- fail "sink.replicas must be 0 or 1: the lake volume is ReadWriteOnce and batches are named per Kafka partition" }}
+{{- end }}
+# Headless Service: gives Prometheus a stable name to scrape (bp-sink-0.bp-sink) and the StatefulSet its identity.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+spec:
+  clusterIP: None
+  selector: {{- include "blockpulse.selector" $ctx | nindent 4 }}
+  ports:
+    - name: metrics
+      port: {{ .Values.sink.metricsPort }}
+---
+# A StatefulSet, not a Deployment: the sink owns files. Its lake lives on a volume that must follow the pod, and
+# its position in the stream is the consumer group's committed offsets, written only after the files are.
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+spec:
+  serviceName: {{ $name }}
+  replicas: {{ .Values.sink.replicas }}
+  selector:
+    matchLabels: {{- include "blockpulse.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "blockpulse.labels" $ctx | nindent 8 }}
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        fsGroup: 10001  # the image's unprivileged user must be able to write the volume
+      initContainers:
+        {{- include "blockpulse.topicsInit" . | nindent 8 }}
+      containers:
+        - name: sink
+          {{- include "blockpulse.appContainer" . | nindent 10 }}
+          args:
+            - kafka-lake
+            - --lake=/data/lake-stream
+            - --group-id={{ .Values.sink.groupId }}
+            - --bootstrap-servers={{ include "blockpulse.kafkaBootstrap" . }}
+            - --metrics-port={{ .Values.sink.metricsPort | int64 }}
+            - --idle-timeout={{ .Values.sink.idleTimeout | int64 }}
+          ports:
+            - name: metrics
+              containerPort: {{ .Values.sink.metricsPort }}
+          # The sink itself never talks to Postgres. The connection string is here so maintenance commands can be
+          # run next to the lake: `kubectl exec bp-sink-0 -- python -m blockpulse serving-rebuild --lake ...`.
+          envFrom:
+            - secretRef:
+                name: {{ include "blockpulse.name" (dict "root" . "component" "app") }}
+          volumeMounts:
+            - name: lake
+              mountPath: /data
+          # The metrics endpoint answers as soon as the process is up, including while it waits for the broker.
+          startupProbe:
+            httpGet: {path: /metrics, port: metrics}
+            periodSeconds: 2
+            failureThreshold: 60
+          livenessProbe:
+            httpGet: {path: /metrics, port: metrics}
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 4
+          resources: {{- toYaml .Values.sink.resources | nindent 12 }}
+  volumeClaimTemplates:
+    - metadata:
+        name: lake
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.sink.storage }}

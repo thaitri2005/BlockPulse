@@ -55,3 +55,22 @@ grafana:
   resources:
     requests: {cpu: 50m, memory: 192Mi}
     limits: {memory: 384Mi}
+
+# The stream sink: reads the enriched topic and writes the lake tables to its volume (blockpulse kafka-lake).
+# It calls nothing outside the cluster, so it is on by default; it simply idles until the worker produces.
+sink:
+  replicas: 1
+  groupId: blockpulse-stream-lake
+  storage: 2Gi
+  idleTimeout: 3600
+  metricsPort: 9108
+  resources:
+    requests: {cpu: 50m, memory: 192Mi}
+    limits: {memory: 512Mi}
+
+prometheus:
+  image: prom/prometheus:v3.5.0
+  retention: 7d
+  resources:
+    requests: {cpu: 50m, memory: 128Mi}
+    limits: {memory: 256Mi}

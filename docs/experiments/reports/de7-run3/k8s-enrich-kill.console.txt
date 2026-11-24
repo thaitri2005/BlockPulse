@@ -1,0 +1,14 @@
+{
+  "drill": "k8s-enrich-kill",
+  "passed": true,
+  "checks": [
+    "PASS the kill lands mid-stream: some offsets committed, some messages still unprocessed",
+    "PASS the Deployment replaced the killed pod without anyone restarting it",
+    "PASS the replacement resumed from the committed offsets and finished: lag 0",
+    "PASS every published message is in the raw topic",
+    "PASS no message lost: every raw message has an enriched record",
+    "PASS duplicates are bounded (replayed since the last checkpoint only)",
+    "PASS idempotent sink: the Parquet archive holds each message exactly once"
+  ]
+}
+Saved to: /home/user/BlockPulse/docs/experiments/reports/de7-run3/k8s-enrich-kill-20261124T121242.json

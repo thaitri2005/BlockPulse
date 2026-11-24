@@ -46,7 +46,7 @@ The pipeline logic is the `blockpulse` package and its CLI. Four runtimes wrap i
 | A shell on the laptop | Any command by hand; the hourly collection task | `scripts/` |
 | Docker Compose | Kafka (profile `m1`); Postgres, Grafana, Prometheus (`m2`); Airflow (`airflow`). Workers and the API run on the host and connect to these | `compose.yaml` |
 | AWS | One EC2 instance running `collect-loop`, `process-pending` and `sync-pending` under systemd, with S3, Glue and Athena. Temporary: it powers off at a deadline | `infra/aws/` |
-| Kubernetes (k3d) | The serving stack as pods in one namespace, from a Helm chart | `infra/k8s/` |
+| Kubernetes (k3d) | Everything downstream of capture as pods in one namespace, from a Helm chart | `infra/k8s/` |
 
 The Kubernetes layout, which mirrors the Compose services:
 
@@ -55,16 +55,18 @@ namespace blockpulse (Helm release "bp")
 
   StatefulSet bp-postgres --- PVC data-bp-postgres-0     Secret bp-postgres (user, password, database)
   StatefulSet bp-kafka ------ PVC data-bp-kafka-0        one KRaft broker, reached as bp-kafka-0.bp-kafka:9092
+  StatefulSet bp-sink ------- PVC lake-bp-sink-0         blockpulse kafka-lake: enriched topic -> lake tables; /metrics
 
   Job bp-db-init       blockpulse db-init      (migrations)   \  Helm hooks: run after every install and
   Job bp-kafka-init    blockpulse kafka-init   (topics)       /  upgrade; both apply only what is missing
 
   Deployment bp-api (2 pods) --- Service bp-api:8000     blockpulse serve; reads Secret bp-app (BLOCKPULSE_DSN)
   Deployment bp-worker (0 or 1)                          blockpulse kafka-enrich; off by default
-  Deployment bp-grafana -------- Service bp-grafana:3000 datasource and dashboard from ConfigMaps
+  Deployment bp-prometheus ----- Service :9090           scrapes bp-sink; alert rules from a ConfigMap
+  Deployment bp-grafana -------- Service :3000           Postgres and Prometheus datasources, two dashboards
 ```
 
-One image, `blockpulse:dev`, runs the API, the worker and both Jobs with different arguments. State lives only in the two volumes and in Kafka's committed offsets, so any pod can be deleted and its controller recreates it. Prometheus, Airflow and the stream sink are not in the chart; they run under Compose.
+One image, `blockpulse:dev`, runs the API, the worker, the sink and both Jobs with different arguments. State lives only in the three volumes and in Kafka's committed offsets, so any pod can be deleted and its controller recreates it. The streamed lake reaches Postgres through `serving-rebuild --lake`, run inside the sink's pod. Airflow is not in the chart; it runs under Compose.
 
 ## Design rules
 
@@ -129,7 +131,7 @@ Elsewhere:
 
 | Path | What it is |
 | --- | --- |
-| `tests/` | pytest (180 tests); Postgres tests opt in with `BLOCKPULSE_TEST_DSN`; Helm chart tests need `helm`; the Kubernetes drill logic is tested with `kubectl` faked |
+| `tests/` | pytest (191 tests); Postgres tests opt in with `BLOCKPULSE_TEST_DSN`; Helm chart tests need `helm`; the Kubernetes drill logic is tested with `kubectl` faked |
 | `analytics/queries/` | Shared SQL, run by DuckDB locally and saved as Athena named queries |
 | `analytics/dbt/` | dbt project: staging, intermediate and mart models with tests, over the lake |
 | `orchestration/airflow/` | Airflow image (BlockPulse in its own venv) and the `blockpulse_daily` DAG |
@@ -143,7 +145,7 @@ Elsewhere:
 | `infra/k8s/` | k3d cluster definition and creation script; the BlockPulse image (`Dockerfile`, `image-load.sh`); Helm chart `chart/blockpulse/` with Postgres and Kafka StatefulSets, setup Jobs, API, worker and Grafana ([14](guides/14-kubernetes.md)) |
 | `scripts/` | Laptop collection task, M2 demo, M3 reproduction |
 | `examples/` | Learning exercise 1 and synthetic fixtures |
-| `.github/workflows/ci.yml` | CI: lock check, lint, pytest with Postgres, Terraform checks, shellcheck, container rehearsals. It does not create a Kubernetes cluster |
+| `.github/workflows/ci.yml` | CI: lock check, lint, pytest with Postgres, Terraform checks, shellcheck, container rehearsals, and a k3d cluster with a chart install and one pod-kill drill |
 
 ## Technology
 
@@ -157,7 +159,7 @@ Elsewhere:
 | Modelling | dbt-core 1.12 with dbt-duckdb | Marts and data tests over the lake |
 | Serving | PostgreSQL 17, FastAPI, Grafana 12 | Read-only API |
 | Orchestration | Apache Airflow 3.3 (standalone, LocalExecutor, SQLite metadata) | Tasks call the `blockpulse` CLI from a separate venv; a one-slot pool guards the data root |
-| Kubernetes | k3d (k3s 1.31) and Helm 3 | The serving stack as StatefulSets, Deployments and Jobs; defaults mirror `compose.yaml` |
+| Kubernetes | k3d (k3s 1.31) and Helm 3 | Kafka, worker, sink, Postgres, API, Prometheus and Grafana as StatefulSets, Deployments and Jobs; defaults mirror `compose.yaml` |
 | Metrics | Prometheus 3.5, prometheus-client | Scrapes the stream sink every 5 s; alert rules for lag, freshness, quarantine, sink down |
 | ML | scikit-learn Isolation Forest | Local append-only registry instead of MLflow |
 | Infrastructure | Terraform (AWS provider 6.x), systemd on Amazon Linux 2023 | No inbound ports, Session Manager, self-expiring |
@@ -170,5 +172,5 @@ Elsewhere:
 - The stream sink makes small files (one per partition per 5-second batch). `lake-compact` merges closed hours, but nothing schedules it.
 - Postgres is a serving copy on one 512 MB container. Incremental loads slow down as the random-keyed `lifecycle_events` index outgrows memory, so large backfills use `serving-rebuild` ([04](guides/04-postgres-api-dashboard.md#two-ways-data-gets-in)).
 - The Kafka-to-Parquet archive writes one file per message (built for restart clarity); the lake is the right-sized store.
-- The Helm chart covers the serving stack only. Prometheus, the pipeline dashboard, Airflow and the stream sink run under Compose.
-- The Kubernetes drills and a real chart install are not part of CI, and have run only on generated traffic in a cloud session.
+- The Helm chart does not include Airflow, and nothing in the cluster schedules compaction or the serving rebuild.
+- Kubernetes has run only on generated traffic: in a cloud session, and in CI, which creates a cluster and runs one pod-kill drill on every push.

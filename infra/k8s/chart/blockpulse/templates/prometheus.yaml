@@ -1,0 +1,79 @@
+{{- $ctx := dict "root" . "component" "prometheus" -}}
+{{- $name := include "blockpulse.name" $ctx -}}
+{{- $sink := include "blockpulse.name" (dict "root" . "component" "sink") -}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 5s
+      evaluation_interval: 5s
+    rule_files:
+      - /etc/prometheus/alerts.yml
+    scrape_configs:
+      # The job name is the one the alert rules use (up{job="blockpulse-stream-lake"}).
+      - job_name: blockpulse-stream-lake
+        static_configs:
+          - targets: ["{{ $sink }}-0.{{ $sink }}:{{ .Values.sink.metricsPort }}"]
+  alerts.yml: |
+{{ .Files.Get "files/prometheus/alerts.yml" | indent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+spec:
+  selector: {{- include "blockpulse.selector" $ctx | nindent 4 }}
+  ports:
+    - name: http
+      port: 9090
+      targetPort: http
+---
+# Metrics are kept in the pod (emptyDir): losing a week of charts when the pod is replaced is acceptable here,
+# and it keeps the chart to three volumes that matter.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $name }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels: {{- include "blockpulse.selector" $ctx | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "blockpulse.labels" $ctx | nindent 8 }}
+      annotations:
+        checksum/config: {{ printf "%s%s" (.Files.Get "files/prometheus/alerts.yml") (toYaml .Values.sink) | sha256sum }}
+    spec:
+      containers:
+        - name: prometheus
+          image: {{ .Values.prometheus.image }}
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time={{ .Values.prometheus.retention }}
+          ports:
+            - name: http
+              containerPort: 9090
+          volumeMounts:
+            - {name: config, mountPath: /etc/prometheus}
+            - {name: data, mountPath: /prometheus}
+          readinessProbe:
+            httpGet: {path: /-/ready, port: http}
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /-/healthy, port: http}
+            periodSeconds: 15
+          resources: {{- toYaml .Values.prometheus.resources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap: {name: {{ $name }}}
+        - name: data
+          emptyDir: {}

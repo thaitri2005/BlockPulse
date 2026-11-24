@@ -79,3 +79,44 @@ jobs:
         run: shellcheck infra/aws/instance/*.sh infra/aws/tests/*.sh infra/k8s/*.sh
       - name: Install, process, upload, stop, and deadline poweroff under systemd
         run: bash infra/aws/tests/run_container_tests.sh
+
+  kubernetes:
+    name: Kubernetes (k3d cluster, chart install, pod-kill drill)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install BlockPulse (exactly the locked versions)
+        run: |
+          pip install --require-hashes -r requirements.lock
+          pip install --no-deps -e .
+      - name: Install k3d
+        run: |
+          sudo curl -fsSL -o /usr/local/bin/k3d https://github.com/k3d-io/k3d/releases/download/v5.8.3/k3d-linux-amd64
+          sudo chmod 755 /usr/local/bin/k3d
+          k3d version && kubectl version --client && helm version --short
+      - name: Create the cluster
+        run: bash infra/k8s/cluster-up.sh
+      - name: Build the image and load it into the cluster
+        run: bash infra/k8s/image-load.sh
+      # The drill installs the chart from nothing into its own namespace, generates synthetic traffic in the
+      # cluster, force-deletes the worker pod mid-stream, and checks that no message is lost.
+      - name: Pod-kill drill (enrichment worker)
+        run: python -m blockpulse drill k8s-enrich-kill --output drill-reports
+      - name: Cluster state on failure
+        if: failure()
+        run: |
+          kubectl get pods -A -o wide || true
+          kubectl -n blockpulse-drill describe pods || true
+          kubectl -n blockpulse-drill logs --all-containers --tail=80 -l app.kubernetes.io/name=blockpulse || true
+      - name: Keep the drill report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-drill-report
+          path: drill-reports/
+          if-no-files-found: ignore

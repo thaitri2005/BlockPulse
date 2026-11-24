@@ -1,6 +1,6 @@
 # 14 · Kubernetes: the same pipeline as pods
 
-The serving stack from `compose.yaml`, run on Kubernetes from a Helm chart, with the failure drills of [guide 10](10-failure-drills.md) rerun by killing pods. Every number here comes from generated traffic in a single-node k3d cluster; the full record is in the [DE7 report](../experiments/2026-11-24-de7-kubernetes.md).
+The whole pipeline downstream of capture (Kafka, the enrichment worker, the stream sink, Postgres, the API, Prometheus and Grafana), run on Kubernetes from a Helm chart, with the failure drills of [guide 10](10-failure-drills.md) rerun by killing pods. Every number here comes from generated traffic in a single-node k3d cluster; the full record is in the [DE7 report](../experiments/2026-11-24-de7-kubernetes.md).
 
 ## Quick start
 
@@ -15,6 +15,7 @@ kubectl -n blockpulse get pods,pvc,jobs
 kubectl -n blockpulse port-forward svc/bp-api 8000:8000          # API at http://127.0.0.1:8000/readyz
 kubectl -n blockpulse port-forward svc/bp-grafana 3000:3000      # Grafana at http://127.0.0.1:3000 (admin / blockpulse_dev)
 kubectl -n blockpulse port-forward svc/bp-postgres 5432:5432     # psql on 127.0.0.1
+kubectl -n blockpulse port-forward svc/bp-prometheus 9090:9090   # Prometheus at http://127.0.0.1:9090
 
 python -m blockpulse drill k8s-enrich-kill      # the drills: about 3.5 min each, 5 min for Postgres
 python -m blockpulse drill k8s-broker-kill
@@ -26,7 +27,7 @@ k3d cluster stop blockpulse                # free the memory, keep the cluster
 k3d cluster delete blockpulse              # remove everything
 ```
 
-The whole stack uses about 1.4 GiB when idle: 0.5 GiB in the pods and the rest in the node.
+The whole stack uses about 1.4 GiB when idle and 1.8 GiB after streaming 20,000 messages (1.1 GiB of that in the pods).
 
 ## Concepts
 
@@ -47,7 +48,7 @@ The whole stack uses about 1.4 GiB when idle: 0.5 GiB in the pods and the rest i
 | Requests, limits | What the scheduler reserves; the ceiling. Over a memory limit the container is killed |
 | Helm hook | A manifest Helm runs at a point in the release's life, here after each install and upgrade |
 
-Exercises 25–28 in the [learning path](../learning/README.md) walk through these.
+Exercises 25–28 in the [learning path](../learning/README.md) walk through these. One more term appears in the chart: an *init container* runs to completion before a pod's main container starts, and is retried until it succeeds.
 
 ## What the chart installs (`infra/k8s/chart/blockpulse/`)
 
@@ -59,10 +60,12 @@ Defaults in `values.yaml` mirror `compose.yaml` (same images, same memory ceilin
 | `bp-kafka` | StatefulSet, 2 Gi volume | Kafka 4.3.1, one KRaft broker; a plain StatefulSet, not an operator (D29) |
 | `bp-db-init`, `bp-kafka-init` | Jobs, Helm hooks | Migrations and topics after every install and upgrade; both apply only what is missing |
 | `bp-api` | Deployment, 2 pods, Service | `blockpulse serve` |
-| `bp-worker` | Deployment, 0 or 1 pod | `blockpulse kafka-enrich`; off by default, `--set worker.replicas=1` to start |
-| `bp-grafana` | Deployment, Service | Postgres datasource and the overview dashboard from ConfigMaps |
+| `bp-worker` | Deployment, 0 or 1 pod | `blockpulse kafka-enrich`; off by default, `--set worker.replicas=1` to start. Like the sink, it creates the topics in an init container before starting |
+| `bp-sink` | StatefulSet, 2 Gi volume | `blockpulse kafka-lake`: the enriched topic into lake tables on its volume; metrics on port 9108 |
+| `bp-prometheus` | Deployment, Service | Scrapes the sink every 5 s; the four alert rules from `observability/prometheus/alerts.yml` |
+| `bp-grafana` | Deployment, Service | Postgres and Prometheus datasources; the overview and pipeline dashboards from ConfigMaps |
 
-One image (`infra/k8s/Dockerfile`, 1.41 GB, the full hashed lock, unprivileged user) runs the API, the worker and the Jobs. k3d has no registry here, so `image-load.sh` copies the image into the node.
+One image (`infra/k8s/Dockerfile`, 1.41 GB, the full hashed lock, unprivileged user) runs the API, the worker, the sink and the Jobs. k3d has no registry here, so `image-load.sh` copies the image into the node.
 
 Choices that differ from Compose:
 
@@ -70,7 +73,36 @@ Choices that differ from Compose:
 - **The API's readiness and liveness ask different questions.** Ready means it can query Postgres (`/readyz`), so it leaves the Service during a database outage and returns by itself. Alive means the process answers (`/healthz`); restarting the API cannot repair Postgres.
 - **The worker cannot be scaled past one.** It calls a public API within a request budget (D08), so the chart refuses more replicas and uses the `Recreate` strategy.
 - **A changed connection string restarts the API.** The Deployment carries a checksum of the Secret; pods read their environment only at start.
-- **The dashboard is a copy** of `observability/grafana/dashboards/blockpulse-overview.json`, because Helm reads only files inside the chart. A test fails if the two differ.
+- **The sink is a StatefulSet.** It owns files: its lake lives on a volume that must follow the pod. Like the worker it is limited to one replica.
+- **Dashboards and alert rules are copies** of the files under `observability/`, because Helm reads only files inside the chart. Tests fail if a copy differs.
+
+## The streaming path, end to end
+
+With the chart installed, traffic can go from a topic to the API without leaving the cluster. The worker is started with its REST fallback pointed at an unreachable address so nothing calls the public API:
+
+```bash
+N="kubectl -n blockpulse"
+helm upgrade bp infra/k8s/chart/blockpulse -n blockpulse --reuse-values --set worker.apiBase=http://127.0.0.1:9/api --set worker.maxRequests=1
+$N run publish --image=blockpulse:dev --image-pull-policy=IfNotPresent --restart=Never --command -- sh -c \
+  "python -m blockpulse synth-capture --output /tmp/s --messages 20000 --seed 1 && python -m blockpulse kafka-replay /tmp/s --bootstrap-servers bp-kafka-0.bp-kafka:9092"
+$N scale deployment bp-worker --replicas=1                                   # enrich: raw topic -> enriched topic
+$N exec bp-sink-0 -- python -m blockpulse lake-compact --lake /data/lake-stream                     # merge closed hours
+$N exec bp-sink-0 -- python -m blockpulse serving-rebuild --root /data --lake /data/lake-stream    # lake -> Postgres
+$N scale deployment bp-worker --replicas=0
+```
+
+Measured on 2026-11-24 with 20,000 generated messages (80,000 transactions):
+
+| Stage | Result |
+| --- | --- |
+| Worker and sink | Both consumer groups at lag 0 within a minute; the sink wrote 84 Parquet files over two hours of event time, 0 quarantined |
+| Prometheus | Target up; 20,000 messages and 80,000 rows per table counted; lag 0. `DataStale` goes pending, correctly: the generated events are dated January 2026 |
+| Grafana | Both dashboards provisioned; both datasources healthy |
+| `lake-compact` | The closed hour went from 30 files to 1 per table (57,596 rows each); the open hour was left alone |
+| `serving-rebuild --lake` | 80,000 scores, events and transactions in Postgres in 8.1 s |
+| API | `/pipeline/status` reports 80,000 transactions, 12,714 flagged; `/alerts` returns them |
+
+The two maintenance commands run inside the sink's pod because that is where the lake volume is mounted; the pod carries the database connection string for that purpose.
 
 ## The drills as pod kills (`src/blockpulse/k8s_drills.py`)
 
@@ -101,7 +133,7 @@ Postgres drill, 200,000 rows per load:
 | Job retried after Postgres returned | 200,000 loaded exactly once |
 | The first run's rows after the Postgres kill | Still 200,000 |
 
-All six runs passed every check. Duplicates are the messages a killed worker had processed since its last checkpoint; they vary by run and are bounded, not zero. The raw reports and console output are in [`experiments/reports/`](../experiments/reports/).
+All six runs passed every check, as did a seventh run of the worker drill after the chart gained the sink and Prometheus (install 21.7 s). Duplicates are the messages a killed worker had processed since its last checkpoint; they vary by run and are bounded, not zero. The raw reports and console output are in [`experiments/reports/`](../experiments/reports/).
 
 ## Restricted hosts
 
@@ -115,6 +147,7 @@ Inside a sandboxed container (a cloud development session, some CI runners) thre
 
 ## Troubleshooting
 
+- **A fresh install hangs until the timeout with one pod crash-looping.** Check whether that pod needs something a post-install hook creates. With `--wait`, hooks run only after every pod is ready, so a pod that needs the hook's result can never become ready. The sink and the worker need the Kafka topics; each creates them in an init container for that reason.
 - **A fixed StatefulSet still crash-loops.** A StatefulSet won't replace a pod that never became ready. Delete the pod; it is recreated from the new spec.
 - **A large number in `values.yaml` renders as `8.388608e+06`.** Helm reads big integers as floats. Convert with `int64` in the template.
 - **An idle pod uses a lot of CPU.** Check its probes: an `exec` probe that starts a JVM every few seconds cost Kafka 0.3 CPU. Use a TCP or HTTP probe.
@@ -124,5 +157,6 @@ Inside a sandboxed container (a cloud development session, some CI runners) thre
 - One node and one broker: self-healing of pods, not high availability. The drills don't test a node failure, a full disk, a network partition or an out-of-memory kill.
 - `local-path` volumes live on the node; deleting the cluster deletes the data.
 - Passwords in `values.yaml` are development defaults, as in Compose.
-- Prometheus, Airflow and the stream sink are not in the chart, and there is no ingress.
-- Run only in a cloud session on generated traffic: not yet on the laptop, on recorded sessions, or in CI.
+- Airflow is not in the chart, and there is no ingress. Compaction and the serving rebuild are run by hand with `kubectl exec`, not on a schedule.
+- Prometheus keeps its data in the pod; replacing the pod loses the history.
+- Run only on generated traffic, in a cloud session and in CI (one drill per push): not yet on the laptop or on recorded sessions.

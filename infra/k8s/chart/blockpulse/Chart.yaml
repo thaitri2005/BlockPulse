@@ -1,6 +1,6 @@
 apiVersion: v2
 name: blockpulse
-description: The BlockPulse serving stack on Kubernetes (Postgres and Kafka; the API, worker and Grafana follow in DE7c)
+description: BlockPulse on Kubernetes - Postgres, Kafka, API, enrichment worker, stream sink, Prometheus and Grafana
 type: application
-version: 0.1.0
+version: 0.2.0
 appVersion: "0.1.0"
