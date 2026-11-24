@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "drill": "k8s-postgres-kill",
+  "created_at": "2026-11-24T10:51:11.235+00:00",
+  "passed": true,
+  "seconds": 268.4,
+  "checks": [
+    {
+      "check": "loader pod was killed inside its load transaction",
+      "passed": true,
+      "detail": {
+        "killed": [
+          "load-a-v5nxp"
+        ]
+      }
+    },
+    {
+      "check": "atomic: nothing from the killed load is visible",
+      "passed": true,
+      "detail": {
+        "rows": 0
+      }
+    },
+    {
+      "check": "the Job retried in a new pod and loaded every row exactly once",
+      "passed": true,
+      "detail": {
+        "rows": 200000,
+        "loaded": 200000,
+        "inserted": 200000,
+        "pods_now": [
+          {
+            "name": "load-a-cjphf",
+            "phase": "Succeeded"
+          }
+        ]
+      }
+    },
+    {
+      "check": "a second load of the same run inserts nothing (idempotent)",
+      "passed": true,
+      "detail": {
+        "inserted": 0,
+        "duplicates": 200000
+      }
+    },
+    {
+      "check": "Postgres pod was killed mid-load, came back on its volume, and that load attempt failed",
+      "passed": true,
+      "detail": {
+        "postgres_ready_after_seconds": 3.3,
+        "failed_attempts": [
+          "load-b-2grmg"
+        ]
+      }
+    },
+    {
+      "check": "atomic: nothing from the interrupted load is visible",
+      "passed": true,
+      "detail": {
+        "rows": 0
+      }
+    },
+    {
+      "check": "the Job retried after Postgres returned and loaded every row exactly once",
+      "passed": true,
+      "detail": {
+        "rows": 200000,
+        "loaded": 200000,
+        "attempts": 2
+      }
+    },
+    {
+      "check": "the earlier run survived the Postgres kill intact",
+      "passed": true,
+      "detail": {
+        "rows": 200000
+      }
+    }
+  ],
+  "rows": 200000,
+  "data": "synthetic",
+  "install_seconds": 19.0,
+  "postgres_ready_after_seconds": 3.3
+}

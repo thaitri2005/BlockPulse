@@ -1,0 +1,15 @@
+{
+  "drill": "k8s-broker-kill",
+  "passed": true,
+  "checks": [
+    "PASS the kill lands mid-stream: some offsets committed, some messages still unprocessed",
+    "PASS the StatefulSet brought the broker back on the same volume",
+    "PASS consumption completes after the broker is back: lag 0",
+    "PASS the worker survived the broker restart (same pod, no container restart)",
+    "PASS every published message is in the raw topic",
+    "PASS no message lost: every raw message has an enriched record",
+    "PASS duplicates are bounded (replayed since the last checkpoint only)",
+    "PASS idempotent sink: the Parquet archive holds each message exactly once"
+  ]
+}
+Saved to: /home/user/BlockPulse/data/drills/k8s-broker-kill-20261124T113031.json

@@ -112,7 +112,7 @@ Data: synthetic, generated in the cluster by `blockpulse synth-capture` (3 sessi
 
 Most of each drill's 200 s is not the failure: it is generating and publishing the traffic, and the verify pod reading both topics and writing 30,000 Parquet files.
 
-One run of each. The committed offset at the kill was 9,001 in both because the kill is triggered by the first poll that sees any commit, and the worker's first checkpoints land at the same place on the same data; it is not a coincidence worth reading into.
+The committed offset at the kill was 9,001 in both; see the second run below, where it differs.
 
 Tests after this step: 176 passed, 1 skipped (5 for the generator, 5 for the drill logic with `kubectl` and `helm` faked).
 
@@ -134,9 +134,30 @@ Data: synthetic, 50,000 messages with 4 transactions each (seed 11), giving 200,
 
 Tests after this step: 179 passed, 1 skipped (8 for the drill logic).
 
+## Second run of all three drills
+
+Same day, after the session's container had been restarted (Docker daemon restarted, cluster reused, image reloaded). Run at the owner's request so each drill has more than one logged run.
+
+| Measure | `k8s-enrich-kill` | `k8s-broker-kill` | `k8s-postgres-kill` |
+| --- | --- | --- | --- |
+| Result | Passed, 7 of 7 | Passed, 8 of 8 | Passed, 8 of 8 |
+| Install | 21.3 s | 19.2 s | 19.6 s |
+| Offsets committed at the kill | 4,501 of 30,000 | 7,501 of 30,000 | n/a |
+| Recovery | New worker pod after 1.2 s | Broker ready after 4.5 s; worker same pod, 0 restarts | Postgres ready after 3.1 s |
+| Lag 0 after the kill | 12.9 s | 16.6 s | n/a |
+| Enriched records / duplicates | 30,117 / 117 | 30,000 / 0 | n/a |
+| Rows after each retry | n/a | n/a | 200,000, exactly once |
+| Whole drill | 199.5 s | 198.1 s | 291.4 s |
+
+The committed offset at the kill differs from the first run (9,001), so the earlier note that it would always land at the same place was wrong: it depends on when the poll happens to see the first commit.
+
+Restarting the cluster showed one bug: `cluster-up.sh` failed its first `kubectl wait` with `ServiceUnavailable` while the restarted API server warmed up. It now retries.
+
+Raw output: [`reports/de7-run1/`](reports/de7-run1/) and [`reports/de7-run2/`](reports/de7-run2/) hold the JSON report of every run; run 2 also has the console output.
+
 ## What DE7 did not cover
 
-- Each drill ran once, in the cloud session, on synthetic traffic. Nothing here was run on the laptop or on recorded sessions.
+- Each drill ran twice, in the cloud session, on synthetic traffic. Nothing here was run on the laptop or on recorded sessions.
 - CI does not create a cluster, so the drills and a real chart install are not part of CI.
 - The image was built only behind the session's proxy.
 - Prometheus, the pipeline dashboard and Airflow are still Compose-only.

@@ -33,3 +33,4 @@ tfplan
 /analytics/dbt/target/
 /analytics/dbt/logs/
 /analytics/dbt/.user.yml
+.coverage

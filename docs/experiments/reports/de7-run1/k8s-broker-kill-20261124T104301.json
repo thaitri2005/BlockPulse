@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "drill": "k8s-broker-kill",
+  "created_at": "2026-11-24T10:43:01.931+00:00",
+  "passed": true,
+  "seconds": 201.9,
+  "checks": [
+    {
+      "check": "the kill lands mid-stream: some offsets committed, some messages still unprocessed",
+      "passed": true,
+      "detail": {
+        "worker_pod": "bp-worker-6479b7f57c-tjpbx",
+        "at_kill": {
+          "partitions": 3,
+          "committed": 9001,
+          "end": 30000,
+          "lag": 20999
+        }
+      }
+    },
+    {
+      "check": "the StatefulSet brought the broker back on the same volume",
+      "passed": true,
+      "detail": {
+        "seconds": 6.5
+      }
+    },
+    {
+      "check": "consumption completes after the broker is back: lag 0",
+      "passed": true,
+      "detail": {
+        "final": {
+          "partitions": 3,
+          "committed": 30000,
+          "end": 30000,
+          "lag": 0
+        },
+        "seconds_from_kill": 13.4
+      }
+    },
+    {
+      "check": "the worker survived the broker restart (same pod, no container restart)",
+      "passed": true,
+      "detail": {
+        "before": {
+          "name": "bp-worker-6479b7f57c-tjpbx",
+          "phase": "Running",
+          "deleting": false,
+          "restarts": 0
+        },
+        "after": {
+          "name": "bp-worker-6479b7f57c-tjpbx",
+          "phase": "Running",
+          "deleting": false,
+          "restarts": 0
+        }
+      }
+    },
+    {
+      "check": "every published message is in the raw topic",
+      "passed": true,
+      "detail": {
+        "published": 30000,
+        "raw_unique": 30000
+      }
+    },
+    {
+      "check": "no message lost: every raw message has an enriched record",
+      "passed": true,
+      "detail": {
+        "missing": 0
+      }
+    },
+    {
+      "check": "duplicates are bounded (replayed since the last checkpoint only)",
+      "passed": true,
+      "detail": {
+        "enriched_records": 30000,
+        "duplicate_records": 0
+      }
+    },
+    {
+      "check": "idempotent sink: the Parquet archive holds each message exactly once",
+      "passed": true,
+      "detail": {
+        "parquet_files": 30000,
+        "unique_messages": 30000,
+        "records_read": 30000
+      }
+    }
+  ],
+  "published": 30000,
+  "sessions": 3,
+  "data": "synthetic",
+  "install_seconds": 19.0,
+  "committed_at_kill": 9001,
+  "broker_ready_after_seconds": 6.5,
+  "worker_survived": true,
+  "raw_records": 30000,
+  "enriched_records": 30000,
+  "duplicate_records": 0
+}

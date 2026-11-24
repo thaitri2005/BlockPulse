@@ -1,6 +1,6 @@
 # BlockPulse: plan and status
 
-Last updated 2026-11-24. This is the working plan: purpose, what's done, what's next, the decisions behind it, and the known limits. The original long-form design (2026-10-08) is kept in [archive/original-design.md](archive/original-design.md); where it disagrees with what was built, [ARCHITECTURE.md](ARCHITECTURE.md) and the guides are current.
+Last updated 2026-11-24. This page says what the project is for, where it stands, what could come next, and which decisions shaped it. How the system works is in [ARCHITECTURE.md](ARCHITECTURE.md); how to run each part is in the [guides](guides/); the dated evidence is in [experiments](experiments/); the step-by-step history is in [archive/milestone-history.md](archive/milestone-history.md).
 
 ## 1. Purpose
 
@@ -16,84 +16,45 @@ What the project will not claim:
 
 ## 2. Status
 
-| Area | Status | Evidence |
+The roadmap (milestones M0–M3 and steps DE1–DE7) is complete.
+
+| Area | State | Guide |
 | --- | --- | --- |
-| M0 · Source validation | Done | Byte-identical replay; [connectivity](experiments/2026-10-08-source-connectivity.md), [validation](experiments/2026-10-09-phase0-phase1-validation.md) |
-| M1 · Kafka ingest, enrich, archive, replay | Done (local) | 402-message replay reproduced 2,732 features exactly ([03](guides/03-kafka.md)). Open: a live `capture-kafka` smoke test |
-| M2 · Rules, Postgres, API, dashboard | Done (local) | Duplicate-safe loads, lifecycle projection, read-only API, Grafana ([02](guides/02-structural-rules.md), [04](guides/04-postgres-api-dashboard.md)) |
-| M3 · ML evaluation | Done | Rules stay champion; Isolation Forest fails 2 of 4 gate criteria on 2.65 M rows ([06](guides/06-ml-evaluation.md)) |
-| DE1–DE2 · Lake and Athena | Done | Partitioned Parquet, quality gate (0 of 8.5 M rows quarantined across 94 sessions), same SQL in DuckDB and Athena ([05](guides/05-lake-and-athena.md)) |
-| E3a · AWS collector | Done | 89 h, 0 failures, 2.65 M transactions, about $0.80, torn down ([08](guides/08-aws.md)) |
-| DE3 · Proof artifacts | Done | Hashed lock and isolated venv; CI green; splits from the lake 3.4x faster; batch load test 250x real time; streaming 86 to 152 msg/s and p50 latency 72 s to 0.16 s; three failure drills pass with 0 lost ([09](guides/09-load-test.md), [10](guides/10-failure-drills.md)) |
-| DE3.5 · Serving and storage hardening | Done | Bulk loads 30–52x faster; serving holds all 2.65 M transactions (rebuilt in 10.6 min); raw 10.3 to 2.1 GB; worker survives a broker restart; lint in CI |
-| DE4 · dbt on the lake | Done | 8 models, 28 tests, `dbt build` in 1.5 min on 2.65 M transactions; marts reproduce the shared queries exactly and agree with Postgres on every status ([11](guides/11-dbt.md)) |
-| DE5 · Streaming into the lake, with metrics | Done | `kafka-lake` sink: 13,707 messages to 207,913 transactions and 466,920 events, row-for-row identical to the batch lake; Prometheus metrics, 4 alert rules, Grafana pipeline dashboard ([12](guides/12-streaming-lake-and-metrics.md)) |
-| DE6 · Airflow orchestration | Done | DAG per UTC day (screen, lake, load, dbt build) with retries and a one-slot pool; a 3-day backfill equals the direct run row for row in the lake, the marts and Postgres; a Postgres outage recovered by retry; four real failures found and fixed ([13](guides/13-airflow.md)) |
-| DE7 · Kubernetes | Done (cloud session, synthetic data) | A k3d cluster from one script and a Helm chart for Postgres, Kafka, the API, the worker and Grafana: installs from nothing in 19 s, about 1.4 GiB. Three pod-kill drills pass with the invariants of [10](guides/10-failure-drills.md): 0 of 30,000 messages lost when the worker or the broker pod is killed, 200,000 rows loaded exactly once when the loader or the Postgres pod is killed. Open: a run on the laptop ([14](guides/14-kubernetes.md), [log](experiments/2026-11-24-de7-kubernetes.md)) |
+| Capture, processing, structural rules | Done | [01](guides/01-capture-and-process.md), [02](guides/02-structural-rules.md) |
+| Kafka ingest, enrichment, replay | Done. Open: a 60 s live `capture-kafka` smoke test from the owner's shell | [03](guides/03-kafka.md) |
+| Postgres serving, API, Grafana | Done | [04](guides/04-postgres-api-dashboard.md) |
+| Lake, quality gate, DuckDB and Athena | Done | [05](guides/05-lake-and-athena.md) |
+| ML evaluation and detector registry | Done. Rules remain champion | [06](guides/06-ml-evaluation.md) |
+| Unattended collection, AWS collector | Done; the AWS stack is torn down | [07](guides/07-collection.md), [08](guides/08-aws.md) |
+| Load tests and failure drills | Done | [09](guides/09-load-test.md), [10](guides/10-failure-drills.md) |
+| dbt models and tests | Done | [11](guides/11-dbt.md) |
+| Streaming into the lake, metrics, alerts | Done | [12](guides/12-streaming-lake-and-metrics.md) |
+| Airflow orchestration | Done | [13](guides/13-airflow.md) |
+| Kubernetes: cluster, Helm chart, pod-kill drills | Done on generated traffic in a cloud session (two logged runs of each drill). Open: a run on the laptop | [14](guides/14-kubernetes.md) |
 
-Tests (2026-10-20): 154 passed and 2 skips (one Linux-only) with the Postgres test database; Terraform 9 of 9 with a mocked provider; Amazon Linux 2023 container rehearsals all pass; CI green. Rechecked 2026-11-24 on Linux after a five-week pause: 155 passed, 1 skipped, lint clean, lock unchanged; 179 passed, 1 skipped, of which 11 Helm chart tests skip without `helm`; CI green on `main`.
+Checks on 2026-11-24 (Linux, Python 3.12): 179 tests passed and 1 skipped; ruff, shellcheck and `helm lint --strict` clean; CI green on `main`. On Windows without `helm` the 11 chart tests skip.
 
-## 3. Roadmap
+## 3. What could come next
 
-Ordered by how much each step builds and demonstrates data engineering skill. Each step ends with tests, a measurement where it applies, docs and a commit.
-
-**Where work runs (decision D21).** The laptop runs only jobs measured in minutes: tests, drills, benchmarks on a day of data or less, loads and rebuilds. Anything that runs for hours (multi-day collection, long soaks, large replays) runs on a short-lived AWS instance with a deadline, as E3a did.
-
-### Done
-
-| Step | What | Evidence |
-| --- | --- | --- |
-| DE1 | Partitioned Parquet lake with a contract-based quality gate | 8.5 M rows, 0 quarantined ([05](guides/05-lake-and-athena.md)) |
-| DE2 | Glue + Athena with partition projection and a scan cap; shared SQL with DuckDB | Queries ran in Athena on the AWS lake ([05](guides/05-lake-and-athena.md)) |
-| E3a | Self-expiring AWS collector | 89 h, 2.65 M transactions, about $0.80 ([08](guides/08-aws.md)) |
-| DE3 | Pinned environment, CI, load tests, failure drills | 250x real time batch; 86 to 152 msg/s streaming; 3 drills, 0 lost ([09](guides/09-load-test.md), [10](guides/10-failure-drills.md)) |
-
-### DE3.5 · Serving and storage hardening (done)
-
-The audit after DE3 found that the serving layer held 16,770 of 2.65 M rows, loading was row by row, and raw captures were 62% of disk. Fixing these changes how serving and storage work, so it comes before new tooling.
-
-| Item | Change | Acceptance | Status |
-| --- | --- | --- | --- |
-| a | Bulk Postgres loads: validate in Python, `COPY` into a staging table, merge with set-based SQL in one transaction | Identical table contents to the row-by-row loader (checksums); measured speedup | Done: scores 52x, events 30x faster, contents identical |
-| b | Serve all the data: rebuild the serving tables from the lake (`serving-rebuild`: COPY into unindexed tables, build indexes once, atomic swap), because incremental merges slowed to about 60 s a session once the random-keyed index outgrew memory | API and dashboard counts match the files | Done: 2.65 M scores, 5.86 M events, 2.82 M transactions in 10.6 min; all 98 runs reconcile exactly |
-| c | Gzip finished raw captures; every reader opens either form | Processing a compressed capture is byte-identical; disk measured before and after | Done: raw 10.3 GB to 2.1 GB (92 sessions); reprocessing is byte-identical |
-| d | Enrichment worker rejoins its group after a broker restart instead of stopping | Drill 2 passes with the worker surviving the restart | Done: survived, 0 lost, 120 duplicates absorbed |
-| e | Ruff lint in CI; fix the existing findings | CI fails on lint | Done |
-
-### Staged after DE3.5
-
-| Step | Scope | Acceptance | Runs on | Effort / status |
-| --- | --- | --- | --- | --- |
-| **DE4 · dbt on the lake** | dbt-duckdb over the lake: staging, intermediate lifecycle, marts, tests, docs and lineage, `dbt build` in CI | `dbt build` green locally and in CI; marts reproduce the shared queries | Laptop | **Done** 2026-10-20 ([11](guides/11-dbt.md)) |
-| **DE5 · One pipeline: streaming into the lake, with metrics** | A Kafka consumer that writes the enriched topic into the same lake tables (hourly files, same contract and quality gate) instead of one Parquet file per message; Prometheus metrics (consumer lag, throughput, error and quarantine rates, data freshness) scraped by Prometheus in the `m2` profile and charted in Grafana; alert rules for lag and freshness | Lake built from the stream equals the lake built from files for the same sessions (row-level check); dashboards show lag and freshness live during a replay | Laptop for build and short replays | **Done** 2026-10-20 ([12](guides/12-streaming-lake-and-metrics.md)) |
-| **DE6 · Airflow orchestration** | A DAG per date partition: process, screen, lake, load, dbt build; retries; a demonstrated backfill of past dates; runs in the existing Compose stack | A backfill of 3 past days produces the same lake and marts as the direct run; a deliberately failed task retries and recovers | Laptop | **Done** 2026-10-20 ([13](guides/13-airflow.md)) |
-| **DE7 · Kubernetes** | k3d cluster; a Helm chart for Kafka (a plain StatefulSet, D29), Postgres (StatefulSet with a volume), API, worker, Grafana; probes, requests and limits; the drills rerun as pod kills | Chart installs from scratch; pod-kill drills pass with the same invariants as [10](guides/10-failure-drills.md) | Cloud session (D30); not yet run on the laptop | **Done** 2026-11-24 ([14](guides/14-kubernetes.md)) |
-
-### Optional, not scheduled
+Nothing is scheduled. Candidates, roughly by value for learning:
 
 | Item | Why | Runs on |
 | --- | --- | --- |
+| Run the Kubernetes quick start and drills on the laptop | The image and scripts have only run behind a cloud session's proxy | Laptop |
+| CI job that creates a k3d cluster, installs the chart and runs one drill | The chart and drills are not exercised in CI | GitHub Actions |
+| Prometheus, the pipeline dashboard and the stream sink in the Helm chart | They run only under Compose | Cloud session or laptop |
+| Incremental dbt models | A daily run rebuilds everything instead of its own day | Laptop |
+| Hourly compaction of the streamed lake | The stream sink writes one small file per partition per batch | Laptop |
+| Load the streamed lake into Postgres | The streaming and serving paths connect only through files | Laptop |
+| Airflow on the AWS instance | The laptop sleeps and misses scheduled runs | AWS, deployed by the owner |
 | Hand-labelled sample (about 200 flagged rows, using the review rubric) | The only route to any accuracy figure | Laptop |
 | Fee feature relative to the hour's median | The model's measured blind spot (new `FEATURE_SET_VERSION`) | Laptop |
 | A second, longer AWS collection (for example a week) to retrain and recheck the gate across seeds | Stability of the model comparison | AWS only |
-| Live `capture-kafka` smoke test (60 s) | Last open M1 check | Laptop, owner's shell |
 | Entity analysis (address grouping over windows) | Original stretch goal; needs coverage and memory evidence | Laptop for design, AWS for long runs |
 
-Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per month than the whole project), and anything that must keep running after a demo. Stopping after DE4 still leaves a complete project.
+Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per month than the whole project), and anything that must keep running after a demo.
 
-**Next session:**
-
-The roadmap DE1–DE7 is complete. What is left is confirmation and optional work; pick with the owner.
-
-1. On the laptop: build the image and run the three Kubernetes drills once without the proxy settings ([14](guides/14-kubernetes.md#quick-start)). Delete the stray branch `claude/gallant-ptolemy-866nd6` on GitHub.
-2. Small follow-ups for the chart: a CI job that creates a k3d cluster, installs the chart and runs one drill; Prometheus and the pipeline dashboard.
-3. Optional, small: hourly compaction of the streamed lake's small files; incremental dbt models so a daily run rebuilds only its day.
-4. Optional: run the Airflow DAG on the AWS instance instead of the laptop (it sleeps; see [13](guides/13-airflow.md)).
-5. The unscheduled items in the table above (hand-labelled sample, fee feature, a longer AWS collection).
-
-To resume in a cloud session: `K3D_CA_BUNDLE=/root/.ccr/ca-bundle.crt bash infra/k8s/cluster-up.sh`, the same prefix for `image-load.sh`, then `helm upgrade --install` as in the guide. Tool versions are in the log.
-
-The record of DE7 is [experiments/2026-11-24-de7-kubernetes.md](experiments/2026-11-24-de7-kubernetes.md).
+**Where work runs.** Jobs measured in minutes run on the laptop or in a cloud development session; anything that runs for hours goes to a short-lived AWS instance with a deadline (decisions D21, D30).
 
 ## 4. Decisions
 
@@ -146,7 +107,9 @@ The record of DE7 is [experiments/2026-11-24-de7-kubernetes.md](experiments/2026
 
 ## 6. Resuming work
 
-1. Read this page and the README.
+1. Read the [README](../README.md) and this page.
 2. Run the tests: `.\.venv\Scripts\python.exe -m pytest -q` (set `BLOCKPULSE_TEST_DSN` and start Postgres for the database tests; see [04](guides/04-postgres-api-dashboard.md)).
-3. Pick the first open item under "Next session".
-4. Before stopping: update section 2 and "Next session", and note anything still running (Compose containers).
+3. Pick an item from section 3 with the owner. Ask before adding infrastructure.
+4. Before stopping: update sections 2 and 3, and say what is still running (containers, a cluster).
+
+In a cloud session, the Kubernetes scripts need `K3D_CA_BUNDLE=/root/.ccr/ca-bundle.crt` ([14](guides/14-kubernetes.md#restricted-hosts)).

@@ -11,10 +11,13 @@ The project owner is building this to learn data engineering. Optimize for their
 
 ## Where things are
 
-- Plan, status, roadmap (DE1-DE7), decisions: `docs/PROJECT_PLAN.md`. The purpose is data engineering skill (D18).
-- What's built: `docs/ARCHITECTURE.md`. How to run each part: `docs/guides/01-...08-*.md`. Keep them in sync with the code.
-- Evidence for every measured claim: `docs/experiments/YYYY-MM-DD-*.md`. The README's "What's done" table must only cite proven numbers.
-- `docs/archive/original-design.md` is the historical design; don't update it.
+`docs/README.md` maps the documentation. Keep each kind of content in its place:
+
+- `README.md` explains the project: what it is, the flow (with diagrams), what outputs mean, results, limits. It is not a changelog; cite only proven numbers.
+- `docs/ARCHITECTURE.md`: what is built and how it connects. `docs/guides/01-...14-*.md`: how to run each part, with its results. Keep both in sync with the code.
+- `docs/PROJECT_PLAN.md`: purpose, status, candidate next work, decisions, risks. Keep it short. The purpose is data engineering skill (D18).
+- `docs/experiments/YYYY-MM-DD-*.md`: dated evidence and session logs; `docs/experiments/reports/` for small raw output. Logs go here, never in the three files above.
+- `docs/archive/`: the original design and the milestone history; don't update them.
 
 ## Commands (Windows, PowerShell)
 

@@ -1,0 +1,15 @@
+{
+  "drill": "k8s-postgres-kill",
+  "passed": true,
+  "checks": [
+    "PASS loader pod was killed inside its load transaction",
+    "PASS atomic: nothing from the killed load is visible",
+    "PASS the Job retried in a new pod and loaded every row exactly once",
+    "PASS a second load of the same run inserts nothing (idempotent)",
+    "PASS Postgres pod was killed mid-load, came back on its volume, and that load attempt failed",
+    "PASS atomic: nothing from the interrupted load is visible",
+    "PASS the Job retried after Postgres returned and loaded every row exactly once",
+    "PASS the earlier run survived the Postgres kill intact"
+  ]
+}
+Saved to: /home/user/BlockPulse/data/drills/k8s-postgres-kill-20261124T113522.json
