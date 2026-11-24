@@ -56,9 +56,15 @@ def generate_capture(output: Path, *, messages: int, seed: int = 7, transactions
                 "raw_text": json.dumps(payload, separators=(",", ":")),
             }
             handle.write(json.dumps(envelope, separators=(",", ":")) + "\n")
+    # The same fields a recorded capture's summary has, so the lake's capture_sessions contract accepts the session.
+    elapsed = 0.25 * messages
     summary = {
-        "synth_schema": SYNTH_SCHEMA, "run_id": run_id, "session_id": run_id, "source_mode": "synthetic", "seed": seed,
-        "messages_saved": messages, "transactions": transactions, "stopped_reason": "generated",
+        "schema_version": 1, "synth_schema": SYNTH_SCHEMA, "run_id": run_id, "session_id": run_id, "source_mode": "synthetic",
+        "seed": seed, "started_at": START.isoformat(timespec="milliseconds"),
+        "ended_at": (START + timedelta(seconds=elapsed)).isoformat(timespec="milliseconds"), "elapsed_seconds": elapsed,
+        "stop_reason": "generated", "config": {"url": None}, "connections": 0, "connection_errors": 0, "gaps": [],
+        "messages_received": messages, "messages_saved": messages, "transactions": transactions,
+        "event_counts": {"added": transactions, "removed": 0, "mined": 0, "replaced": 0},
         "note": "Synthetic capture for drills and load tests. No transaction here was broadcast or observed.",
     }
     write_summary(output / "summary.json", summary)

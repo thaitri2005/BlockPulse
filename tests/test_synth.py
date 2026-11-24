@@ -50,3 +50,18 @@ def test_cli_writes_a_session_folder(tmp_path, capsys):
     assert main(["synth-capture", "--output", str(tmp_path / "s"), "--messages", "3", "--seed", "9"]) == 0
     assert (tmp_path / "s" / "summary.json").is_file()
     assert '"source_mode": "synthetic"' in capsys.readouterr().out
+
+
+def test_a_synthetic_session_passes_every_lake_contract_including_capture_sessions(tmp_path):
+    """A generated session must go through the whole batch path with nothing quarantined, so dbt and the shared
+    queries work on generated data too."""
+    pytest.importorskip("pyarrow")
+    from blockpulse import collector
+    layout = collector.Layout(tmp_path / "root")
+    generate_capture(layout.raw / "session-synth", messages=30, seed=5)
+    result = collector.process_pending(layout)
+    assert result["failed"] == []
+    report = json.loads((layout.root / "lake" / "_quality" / "session-synth.json").read_text(encoding="utf-8"))
+    assert {name: table["rows_quarantined"] for name, table in report["tables"].items()} == {
+        "transactions": 0, "lifecycle_events": 0, "capture_sessions": 0}
+    assert report["tables"]["capture_sessions"]["rows_written"] == 1
