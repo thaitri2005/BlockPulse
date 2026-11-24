@@ -7,7 +7,7 @@ DE7 moves the serving stack from Docker Compose to Kubernetes, then reruns the f
 | DE7a | A local cluster that can run pods (`infra/k8s/`) | Done 2026-11-24 |
 | DE7b | Helm chart: Postgres and Kafka as StatefulSets with volumes, probes, requests and limits | Done 2026-11-24 |
 | DE7c | BlockPulse image; migrations and topics as Jobs; API, enrichment worker and Grafana as Deployments | Done 2026-11-24 |
-| DE7d | Drills rerun as pod kills, same invariants as [guide 10](10-failure-drills.md) | Next |
+| DE7d | Drills rerun as pod kills, same invariants as [guide 10](10-failure-drills.md) | Kafka drills done 2026-11-24; the Postgres drill is next |
 
 ## Quick start
 
@@ -108,7 +108,7 @@ All on generated probe data (the recorded dataset is not in the cloud session).
 
 Nobody restarted the killed pods: the StatefulSet controller saw a missing pod and created it again, attached to the same claim. In the Compose drills the drill itself ran `docker restart`.
 
-`tests/test_helm_chart.py` (11 tests) renders the chart and asserts these properties without a cluster; the tests skip when `helm` isn't installed.
+`tests/test_helm_chart.py` (11 tests) renders the chart and asserts these properties without a cluster; the tests skip when `helm` isn't installed. `tests/test_k8s_drills.py` and `tests/test_synth.py` cover the drill logic (with `kubectl` and `helm` faked) and the generator.
 
 ### Things that went wrong
 
@@ -116,6 +116,44 @@ Nobody restarted the killed pods: the StatefulSet controller saw a missing pod a
 - **`helm upgrade` didn't replace the crashing pod.** A StatefulSet updates pods in order and waits for each to be ready before touching it, so a pod crash-looping on the old spec is never replaced by the fixed one. Deleting the pod by hand lets the controller recreate it from the new spec. After fixing a broken StatefulSet, check the pod's age.
 - **A health check that cost a third of a CPU.** Kafka's readiness probe first ran a Kafka CLI command, as the Compose healthcheck does. Every call starts a JVM, and the idle broker showed about 310 m CPU. A TCP check on the listener brought it to about 30 m. Compose hid the cost because nobody looks at `docker stats` for an idle container; `kubectl top` showed it at once.
 - **A build-time download ignored pip's CA setting.** One dependency fetches a file with Python's `urllib` while building, which reads `SSL_CERT_FILE`, not `PIP_CERT`. The Dockerfile sets both when a CA is supplied.
+
+## The drills as pod kills (`src/blockpulse/k8s_drills.py`)
+
+The same invariant as [guide 10](10-failure-drills.md): after a crash, nothing is lost and every input is represented exactly once where it matters. What changes is who recovers. In Compose the drill killed a process and then started it again itself. Here the drill only deletes a pod, with `--grace-period=0 --force` so the container gets SIGKILL and no clean shutdown; a controller replaces it, and the drill waits and checks.
+
+```bash
+python -m blockpulse drill k8s-enrich-kill      # about 3.5 min each, cluster and image must exist (steps 1-2 above)
+python -m blockpulse drill k8s-broker-kill
+```
+
+Each drill:
+
+1. Installs the chart into its own namespace, `blockpulse-drill`, so the topics start empty, and deletes the namespace at the end (`--keep` leaves it for inspection). Installing from nothing on every run is also the "chart installs from scratch" check.
+2. Generates traffic inside the cluster: a pod runs `blockpulse synth-capture` for three sessions and replays them into the raw topic. One session maps to one partition, because the record key is the session.
+3. Scales the worker to one pod and waits until the consumer group has committed some offsets but not all. The kill is triggered by that condition, not by a timer, so it always lands mid-stream.
+4. Deletes the pod, waits for the controller to recover and for lag to reach 0.
+5. Runs the Compose drills' Kafka checks in a pod (`blockpulse drill kafka-verify`): every raw message has an enriched record, duplicates are bounded, and the Parquet sink holds each message exactly once.
+
+The worker's REST fallback points at an unreachable address, as in the Compose drills, so nothing calls the public API.
+
+**Synthetic traffic (`src/blockpulse/synth.py`).** `blockpulse synth-capture --output DIR --messages N --seed S` writes a capture session with the same envelope and payload layout as a recorded one, labelled `source_mode: synthetic`. Amounts balance and every input value is present, so the normal pipeline accepts it with no issues. The same seed gives byte-identical files. It exists because drills need thousands of messages and the recorded sessions are not in the repository; results on it describe pipeline behaviour only.
+
+### Results (2026-11-24, 30,000 synthetic messages, 120,000 transactions)
+
+| Check | Worker pod killed | Broker pod killed |
+| --- | --- | --- |
+| Kill landed mid-stream | 9,001 of 30,000 offsets committed | 9,001 of 30,000 committed |
+| Recovery, with nobody restarting anything | Deployment had a new worker pod running 2.3 s after the kill | StatefulSet had the broker ready on the same volume after 6.5 s |
+| Lag back to 0 | 8.8 s after the kill | 13.4 s after the kill |
+| Worker survived | Not applicable (it was the one killed) | Yes: same pod, 0 container restarts |
+| No message lost | 0 of 30,000 missing from the enriched topic | 0 of 30,000 missing |
+| Duplicates | 413 enriched twice | 0 |
+| Idempotent sink | 30,000 Parquet files from 30,413 records | 30,000 files from 30,000 records |
+| Whole drill, install to teardown | 200 s | 202 s |
+
+Both passed on the first run. The 413 duplicates are the messages the killed worker had processed after its last checkpoint; the replacement redelivered them and the sink absorbed them, as in the Compose drill (44 there, on a smaller and slower run). The broker kill produced none in this run: the worker happened to have nothing uncommitted when its commit was next accepted. Duplicates there are possible and bounded, not expected to be zero.
+
+Compared with [guide 10](10-failure-drills.md): the invariants and the worker code are the same; the traffic is synthetic instead of recorded (30,000 messages instead of 4,641), so the counts are not comparable, only the pass or fail of each check.
 
 ## Limits
 

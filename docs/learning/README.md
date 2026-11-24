@@ -41,6 +41,7 @@ Each exercise is sized for one sitting of about 30-60 minutes. Stop when a conce
 | 25 | A cluster on your own machine | Clusters, nodes, pods, contexts; declared state vs started processes; debugging a pod that won't start from its events | `infra/k8s/k3d.yaml`, `infra/k8s/cluster-up.sh`; [Kubernetes guide](../guides/14-kubernetes.md) | To write together |
 | 26 | State that survives its pod | Helm charts and values, StatefulSets, volume claims, headless Services, probes, requests and limits | `infra/k8s/chart/blockpulse/templates/postgres.yaml`, `values.yaml`; `tests/test_helm_chart.py` | To write together |
 | 27 | Stateless services, jobs and configuration | Deployments vs StatefulSets, Services, Jobs and Helm hooks, Secrets and ConfigMaps, readiness vs liveness | `infra/k8s/chart/blockpulse/templates/api.yaml`, `setup-jobs.yaml`; `infra/k8s/Dockerfile` | To write together |
+| 28 | Who restarts it? Drills on Kubernetes | Controllers and desired state, graceful vs forced deletion, consumer-group lag as a progress measure, condition-triggered faults | `k8s_drills.py` → `drill_enrich_kill()`; `synth.py`; [Kubernetes guide](../guides/14-kubernetes.md#the-drills-as-pod-kills-srcblockpulsek8s_drillspy) | To write together |
 
 ## Exercise outlines
 
@@ -63,6 +64,8 @@ These are starting points, not finished walkthroughs. We turn one into a full pa
 **26. State that survives its pod.** Install the chart, create a table in Postgres with a few rows, then `kubectl -n blockpulse delete pod bp-postgres-0` and watch `kubectl -n blockpulse get pods -w`. Check the rows are still there. Then run `helm template bp infra/k8s/chart/blockpulse` and find the claim template in the output. Question to answer: `helm uninstall` leaves the claims behind; why is that the safe default, and what would you have to do to lose the data?
 
 **27. Stateless services, jobs and configuration.** With the chart installed, run `kubectl -n blockpulse scale statefulset bp-postgres --replicas=0` and watch the API pods: they stay Running but go to `0/1` ready. Scale Postgres back to 1 and watch them return. Read the two probes in `api.yaml`. Question to answer: what would happen to the API pods during that outage if liveness also used `/readyz`?
+
+**28. Who restarts it?** Run `blockpulse drill k8s-enrich-kill --keep` and, in a second terminal, `kubectl -n blockpulse-drill get pods -w`. Find the moment the worker pod's name changes. Then read `drill_enrich_kill()` next to `drill_enrich_crash()` in `drills.py`. Question to answer: the Compose drill restarts the worker itself and the Kubernetes drill doesn't; which line of the chart is doing that job, and what would happen if the worker were a bare pod instead of a Deployment?
 
 ## Useful commands while learning
 

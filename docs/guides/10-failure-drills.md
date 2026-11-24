@@ -58,6 +58,10 @@ One hourly session (57,338 scored transactions) loaded into a separate `blockpul
 
 Each session loads in one transaction, so a crash leaves nothing behind, and the unique key on `(run_id, txid, feature version, rule version)` makes reruns harmless.
 
+## The same drills on Kubernetes
+
+The Kafka drills also run as pod kills in a k3d cluster, where a controller does the restarting instead of the drill: see [guide 14](14-kubernetes.md#the-drills-as-pod-kills-srcblockpulsek8s_drillspy). They use generated traffic, so their counts are not comparable with the ones above.
+
 ## Limits
 
 - One machine and one broker: the drills test correctness under crashes, not high availability.

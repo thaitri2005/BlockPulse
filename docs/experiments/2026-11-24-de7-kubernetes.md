@@ -85,4 +85,33 @@ The 1.4 GiB total is well under the 3–4 GB estimated before starting; the esti
 
 Tests after DE7c: `tests/test_helm_chart.py` has 11 tests; full suite 166 passed, 1 skipped; `helm lint --strict`, ruff and shellcheck clean.
 
-Not verified: the CI run. The shellcheck step now includes `infra/k8s/*.sh`, and the chart tests run in the Python job if the runner has `helm` (GitHub's Ubuntu images normally do), The first push to `main` (2026-11-24) triggers CI; check that run. Also not done: a build of the image without the proxy settings, which is the path the laptop will take.
+Not done: a build of the image without the proxy settings, which is the path the laptop will take.
+
+## First push and CI
+
+Pushes were refused (HTTP 403) until the owner installed the Claude GitHub App on the repository; DE7a–c then went to `main` in one push, authored as the owner. A separate session branch, `claude/gallant-ptolemy-866nd6`, was pushed first by mistake and could not be deleted from the session; it holds nothing that isn't on `main` and can be deleted on GitHub.
+
+CI run 13 on `main` (commit `d34c9ce`) passed all three jobs: Python tests with Postgres, Terraform, and the instance rehearsal, whose shellcheck step now covers `infra/k8s/*.sh`. Not confirmed: whether the 11 Helm chart tests ran or skipped there; the job passes either way, and the log tail did not show the pytest summary.
+
+## DE7d · Pod-kill drills (Kafka)
+
+Data: synthetic, generated in the cluster by `blockpulse synth-capture` (3 sessions of 10,000 messages, 4 transactions each, seeds 1–3). Check on the generator first: 2,000 messages processed by `blockpulse process` gave 8,000 features, 0 issues, 0 incomplete transactions; two runs with the same seed were byte-identical (5.65 MB).
+
+| Measure | `k8s-enrich-kill` | `k8s-broker-kill` |
+| --- | --- | --- |
+| Result | Passed, 7 of 7 checks, first run | Passed, 8 of 8 checks, first run |
+| Chart install into a fresh namespace | 19.3 s | 19.0 s |
+| Group offsets when the pod was deleted | 9,001 committed of 30,000 | 9,001 committed of 30,000 |
+| Recovery | Replacement worker pod running after 2.3 s | Broker ready after 6.5 s |
+| Lag 0 after the kill | 8.8 s | 13.4 s |
+| Worker pod | Replaced (new name) | Same pod, 0 restarts |
+| Raw / enriched records | 30,000 / 30,413 | 30,000 / 30,000 |
+| Duplicates | 413 | 0 |
+| Parquet files in the sink | 30,000 | 30,000 |
+| Whole drill | 199.5 s | 201.9 s |
+
+Most of each drill's 200 s is not the failure: it is generating and publishing the traffic, and the verify pod reading both topics and writing 30,000 Parquet files.
+
+One run of each. The committed offset at the kill was 9,001 in both because the kill is triggered by the first poll that sees any commit, and the worker's first checkpoints land at the same place on the same data; it is not a coincidence worth reading into.
+
+Tests after this step: 176 passed, 1 skipped (5 for the generator, 5 for the drill logic with `kubectl` and `helm` faked).

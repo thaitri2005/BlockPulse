@@ -19,7 +19,7 @@ The project owner is building this to learn data engineering. Optimize for their
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/guides/04-postgres-api-dashboard.md): 154 passed, 2 skipped (one is Linux-only); without it: 136 passed, 20 skipped; 11 more pass when `helm` is installed, otherwise 11 more skip
+.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/guides/04-postgres-api-dashboard.md): 154 passed, 2 skipped (one is Linux-only); without it: 136 passed, 20 skipped; on Linux with `helm` and the test database: 176 passed, 1 skipped (the 11 Helm chart tests skip without `helm`)
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
 docker compose --profile m2 up -d --wait          # Postgres + Grafana + Prometheus (~1.1 GB); `stop` when done
@@ -65,6 +65,7 @@ CI fails if the lock doesn't match `pyproject.toml`. The AWS bundle ships the sa
 - Kubernetes objects live in the Helm chart `infra/k8s/chart/blockpulse/`; its defaults mirror `compose.yaml`. After changing a template, run `helm lint --strict` and `pytest tests/test_helm_chart.py`. The chart's dashboard in `files/dashboards/` is a copy of `observability/grafana/dashboards/blockpulse-overview.json`; copy it again after editing (a test fails otherwise). In a cloud session, run `cluster-up.sh` and `image-load.sh` with `K3D_CA_BUNDLE=/root/.ccr/ca-bundle.crt` (see docs/guides/14-kubernetes.md).
 - SQL in `analytics/queries/` must run in both DuckDB and Athena (Trino): stick to standard SQL, and test with `blockpulse lake-query`.
 - dbt runs through `blockpulse dbt <args>` (absolute paths). New models need tests in their YAML; if a mart restates a shared query, check it matches.
+- Generated captures (`blockpulse synth-capture`) are labelled `source_mode: synthetic`; never mix their counts with recorded data in a claim. The Kubernetes drills (`drill k8s-*`) install into the namespace `blockpulse-drill` and delete it afterwards.
 - Tests must not hit the public API. Use the fixtures in `examples/fixtures/` or mocks, as the existing tests do.
 - Amounts are integer satoshis. Missing values are errors, never zero.
 - Feature or rule changes bump `FEATURE_SET_VERSION` / `RULESET_VERSION`.

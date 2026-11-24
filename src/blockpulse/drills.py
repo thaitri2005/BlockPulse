@@ -71,6 +71,13 @@ def _kafka_invariants(checks: list, bootstrap: str, published: int, archive: Pat
     return {"raw_records": len(raw_ids), "enriched_records": len(enriched_ids), "duplicate_records": duplicates}
 
 
+def verify_kafka(bootstrap: str, published: int, archive: Path) -> dict:
+    """The Kafka invariants alone, as a report. The Kubernetes drills run this in a pod after the kill."""
+    started, checks = time.monotonic(), []
+    facts = _kafka_invariants(checks, bootstrap, published, archive)
+    return _report("kafka-verify", started, checks, published=published, **facts)
+
+
 def _publish(sessions: list[Path], bootstrap: str) -> int:
     from blockpulse.kafka_pipeline import create_m1_topics, publish_capture
     create_m1_topics(bootstrap)

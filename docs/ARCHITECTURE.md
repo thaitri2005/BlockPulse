@@ -60,7 +60,7 @@ Design rules that hold everywhere:
 | Unattended collection | `collect`, `collect-loop`, `process-pending` (`--date` for one day), `sync-pending`, `compact-raw` | [07](guides/07-collection.md), [08](guides/08-aws.md) |
 | Orchestration | Airflow DAG `blockpulse_daily` in the `airflow` Compose profile; `airflow backfill create` | [13](guides/13-airflow.md) |
 | Kubernetes | `infra/k8s/cluster-up.sh`, `infra/k8s/image-load.sh`, `helm upgrade --install bp infra/k8s/chart/blockpulse` | [14](guides/14-kubernetes.md) |
-| Load test and drills | `benchmark batch`, `benchmark streaming`, `drill enrich-crash`, `drill broker-restart`, `drill postgres-crash` | [09](guides/09-load-test.md), [10](guides/10-failure-drills.md) |
+| Load test and drills | `benchmark batch`, `benchmark streaming`, `drill enrich-crash`, `drill broker-restart`, `drill postgres-crash`; on Kubernetes `drill k8s-enrich-kill`, `drill k8s-broker-kill`; `synth-capture` for generated traffic | [09](guides/09-load-test.md), [10](guides/10-failure-drills.md) |
 
 ## Code
 
@@ -87,7 +87,9 @@ Python package `src/blockpulse/` (about 4,500 lines, flat on purpose):
 | `model.py`, `evaluate.py`, `sweep.py`, `registry.py` | 719 | Isolation Forest, threshold calibration, synthetic sweep, detector registry and gate |
 | `collector.py` | 359 | Capture loop, idempotent session processing (all pending, or one start date), lock, S3 upload |
 | `benchmark.py` | 198 | Batch and streaming load tests on recorded sessions (`benchmark`) |
-| `drills.py` | 191 | Failure drills: worker crash, broker restart, Postgres crash (`drill`) |
+| `drills.py` | 201 | Failure drills: worker crash, broker restart, Postgres crash (`drill`) |
+| `k8s_drills.py` | 195 | The same drills as pod kills in a k3d cluster (`drill k8s-*`) |
+| `synth.py` | 66 | Deterministic synthetic capture sessions for drills (`synth-capture`) |
 | `cli.py` | 572 | Command-line entry point |
 
 Elsewhere:
