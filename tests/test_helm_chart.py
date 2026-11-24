@@ -210,3 +210,25 @@ def test_topic_consumers_create_their_topics_before_starting():
         (init,) = _pod_spec(workload)["initContainers"]
         assert init["args"] == ["kafka-init", "--bootstrap-servers", "bp-kafka-0.bp-kafka:9092"]
         assert init["image"] == "blockpulse:dev" and init["securityContext"]["runAsNonRoot"] is True
+
+
+def test_maintenance_cronjob_compacts_next_to_the_sink_and_only_rebuilds_serving_when_asked():
+    docs = _render()
+    cron = _one(docs, "CronJob", "bp-maintenance")
+    assert cron["spec"]["concurrencyPolicy"] == "Forbid"
+    pod = cron["spec"]["jobTemplate"]["spec"]["template"]["spec"]
+    (container,) = pod["containers"]
+    shell = container["command"][-1]
+    assert "lake-compact --lake /data/lake-stream" in shell and "serving-rebuild" not in shell
+    assert "exit 0" in shell  # an empty volume is not a failure
+    assert pod["volumes"] == [{"name": "lake", "persistentVolumeClaim": {"claimName": "lake-bp-sink-0"}}]
+    # The volume is ReadWriteOnce, so the job must land on the sink's node.
+    term = pod["affinity"]["podAffinity"]["requiredDuringSchedulingIgnoredDuringExecution"][0]
+    assert term["labelSelector"]["matchLabels"]["app.kubernetes.io/component"] == "sink"
+
+    serving = _one(_render("--set", "maintenance.serveStreamedLake=true"), "CronJob", "bp-maintenance")
+    shell = serving["spec"]["jobTemplate"]["spec"]["template"]["spec"]["containers"][0]["command"][-1]
+    assert shell.index("lake-compact") < shell.index("serving-rebuild --root /data --lake /data/lake-stream")
+
+    without_sink = _render("--set", "sink.replicas=0")
+    assert not [d for d in without_sink if d["kind"] == "CronJob"]

@@ -65,7 +65,7 @@ Two smaller things to find in `load_events()`:
 
 ## Change one small thing
 
-Add a test to `tests/test_lifecycle.py`, using its `event()` and `write()` helpers: one transaction with `event("mined", 10)` and `event("replaced", 20)`, loaded together, must end as `superseded`. This is the `bbbb` case from the fixture.
+Read `test_time_outranks_event_kind` in `tests/test_lifecycle.py`: one transaction with `event("mined", 10)` and `event("replaced", 20)`, loaded together, must end as `superseded`. (The test was added after this exercise was first written, because the other four tests did not cover it.) This is the `bbbb` case from the fixture.
 
 Then, temporarily, delete `e.event_time DESC,` from `_PROJECT_BODY` and run:
 

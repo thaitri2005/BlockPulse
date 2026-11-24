@@ -16,7 +16,7 @@ What the project will not claim:
 
 ## 2. Status
 
-The roadmap (milestones M0–M3 and steps DE1–DE7) is complete.
+**The project is complete.** The roadmap (milestones M0–M3 and steps DE1–DE7) is built, and the dataset is final: the 89-hour AWS collection plus the earlier laptop sessions, 2.65 million transactions. No further collection will be run (decision D32), so every conclusion stands on that data.
 
 | Area | State | Guide |
 | --- | --- | --- |
@@ -24,35 +24,41 @@ The roadmap (milestones M0–M3 and steps DE1–DE7) is complete.
 | Kafka ingest, enrichment, replay | Done. Open: a 60 s live `capture-kafka` smoke test from the owner's shell | [03](guides/03-kafka.md) |
 | Postgres serving, API, Grafana | Done | [04](guides/04-postgres-api-dashboard.md) |
 | Lake, quality gate, DuckDB and Athena | Done | [05](guides/05-lake-and-athena.md) |
-| ML evaluation and detector registry | Done. Rules remain champion | [06](guides/06-ml-evaluation.md) |
+| ML evaluation and detector registry | Done, and final: the rules remain champion | [06](guides/06-ml-evaluation.md) |
 | Unattended collection, AWS collector | Done; the AWS stack is torn down | [07](guides/07-collection.md), [08](guides/08-aws.md) |
 | Load tests and failure drills | Done | [09](guides/09-load-test.md), [10](guides/10-failure-drills.md) |
 | dbt models and tests; the hourly mart refreshable by day | Done | [11](guides/11-dbt.md) |
-| Streaming into the lake, metrics, alerts, compaction, serving from the streamed lake | Done; compaction and stream serving tested on fixtures only | [12](guides/12-streaming-lake-and-metrics.md) |
+| Streaming into the lake, metrics, alerts, compaction, serving from the streamed lake | Done; compaction and stream serving verified on fixtures and on generated traffic in the cluster | [12](guides/12-streaming-lake-and-metrics.md) |
 | Airflow orchestration | Done | [13](guides/13-airflow.md) |
-| Kubernetes: cluster, Helm chart for the whole streaming and serving path, pod-kill drills | Done on generated traffic, in a cloud session and in CI. Open: a run on the laptop | [14](guides/14-kubernetes.md) |
+| Kubernetes: cluster, Helm chart for the whole streaming and serving path, scheduled lake upkeep, pod-kill drills | Done on generated traffic, in a cloud session and in CI | [14](guides/14-kubernetes.md) |
 
-Checks on 2026-11-24 (Linux, Python 3.12): 190 tests passed and 1 skipped; ruff, shellcheck and `helm lint --strict` clean; CI green on `main`, including the Kubernetes job (cluster, image build, chart install, worker drill) in 4.5 min. On Windows without `helm` the 14 chart tests skip.
+Checks on 2026-11-24 (Linux, Python 3.12): 192 tests passed and 1 skipped; ruff, shellcheck and `helm lint --strict` clean; CI green on `main`, including the Kubernetes job (cluster, image build, chart install, worker drill) in 4.5 min. On Windows without `helm` the 14 chart tests skip.
 
-## 3. What could come next
+## 3. What is left
 
-Nothing is scheduled. Candidates, roughly by value for learning:
+Nothing is required. Three confirmations need the owner's machine, and a few extensions are possible on the existing data.
 
-| Item | Why | Runs on |
-| --- | --- | --- |
-| Run the Kubernetes quick start and drills on the laptop | They pass on a plain Linux runner in CI and in a cloud session, but have not run on Windows with Docker Desktop | Laptop |
-| Schedule `lake-compact` and time it, and `serving-rebuild --lake`, on recorded traffic | Both exist and are tested on fixtures only | Laptop |
-| A continuous load from the stream into Postgres | Serving from the streamed lake is a full rebuild | Laptop |
-| Schedule compaction and the serving rebuild in the cluster (a CronJob) | They are run by hand with `kubectl exec` | Cloud session or laptop |
-| Airflow on the AWS instance | The laptop sleeps and misses scheduled runs | AWS, deployed by the owner |
-| Hand-labelled sample (about 200 flagged rows, using the review rubric) | The only route to any accuracy figure | Laptop |
-| Fee feature relative to the hour's median | The model's measured blind spot (new `FEATURE_SET_VERSION`) | Laptop |
-| A second, longer AWS collection (for example a week) to retrain and recheck the gate across seeds | Stability of the model comparison | AWS only |
-| Entity analysis (address grouping over windows) | Original stretch goal; needs coverage and memory evidence | Laptop for design, AWS for long runs |
+**Confirmations on the laptop (each a few minutes):**
 
-Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per month than the whole project), and anything that must keep running after a demo.
+| Item | Why it is open |
+| --- | --- |
+| Kubernetes quick start and one drill on Windows with Docker Desktop | They pass on Linux (CI and a cloud session) only |
+| `lake-compact` and `serving-rebuild --lake` on a recorded stream replay | Verified on fixtures and generated traffic only |
+| A 60 s live `capture-kafka` | Agent sessions cannot open the public WebSocket |
 
-**Where work runs.** Jobs measured in minutes run on the laptop or in a cloud development session; anything that runs for hours goes to a short-lived AWS instance with a deadline (decisions D21, D30).
+**Possible extensions, all on the existing dataset:**
+
+| Item | Why |
+| --- | --- |
+| Hand-labelled sample (about 200 flagged rows, using the review rubric) | The only route to any accuracy figure |
+| Recheck the promotion gate across several seeds | Whether the model's rejection is stable; costs reruns, not data |
+| Fee feature relative to the hour's median | The model's measured blind spot; needs a new `FEATURE_SET_VERSION` and reprocessing every session |
+| A continuous load from the stream into Postgres | Serving from the streamed lake is a full rebuild |
+| Airflow in the Helm chart | It is the one service still Compose-only |
+
+Closed, not to be done: a longer AWS collection (D32); managed Kafka (MSK), EKS and RDS, each of which costs more per month than the whole project; entity analysis over address groups, which would need more coverage than this dataset has.
+
+**Where work runs.** Jobs measured in minutes run on the laptop or in a cloud development session. Nothing in the remaining list needs AWS.
 
 ## 4. Decisions
 
@@ -84,6 +90,7 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 | D27 | Airflow orchestrates the CLI; it doesn't contain pipeline logic. BlockPulse runs from its own venv in the Airflow image, metadata is SQLite, the unit of work is one UTC day of capture starts (`process-pending --date`), and a one-slot pool guards the data root | 2026-10-20: one implementation for every runner (D15); Airflow's dependencies never mix with the lock; a pool also covers backfill runs, which `max_active_runs` doesn't |
 | D28 | A processing lock is stale when its process is gone (same host) or it is 3 h old, and SIGTERM exits through cleanup | 2026-10-20: a task killed by Airflow after the laptop slept left its lock and blocked every retry |
 | D29 | Kafka on Kubernetes is a plain StatefulSet running the same `apache/kafka` image as Compose, not Strimzi or Redpanda | 2026-11-24: the drills must compare like with like (same broker, same version); an operator adds custom resources and about 0.5 GB without changing what the drills prove. Revisit if the goal becomes learning operators |
+| D32 | The dataset is final: no further AWS collection. The project is completed on the 2.65 million transactions already collected | 2026-11-24, owner's decision. The model comparison therefore stays as measured (rules champion, gate failed 2 of 4); its stability can still be checked across seeds on the same data |
 | D31 | Drills that can't use recorded sessions run on generated captures labelled synthetic (`synth-capture`), and reports say so | 2026-11-24: recorded data is local evidence outside the repository; a deterministic generator also lets drills run anywhere, CI included. Counts from synthetic and recorded runs are never compared |
 | D30 | DE7 is developed in an ephemeral cloud session on generated or fixture data; every step is pushed | 2026-11-24: the session has the same memory as the laptop with nothing competing for it; the recorded dataset stays on the laptop, so DE7 numbers are labelled with their data |
 | D23 | Finished raw captures are gzipped in place; all readers accept either form | 2026-10-20: raw was 62% of disk; gzip is 5.4x smaller, stdlib only, byte-identical on read |
@@ -93,7 +100,7 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 | Risk or limit | Handling |
 | --- | --- |
 | No labels | Conclusions stay about behaviour, stability and agreement. A small hand-reviewed sample is the only route to accuracy figures |
-| Gate decisions near a boundary move with the training sample | Check across seeds before promoting |
+| Gate decisions near a boundary move with the training sample | Check across seeds before promoting; no new data will be collected to settle it (D32) |
 | The public feed drops every few minutes | Long captures allow 300 reconnects; gaps are recorded as a lower bound |
 | Disk: about 4–5 GB a day of collection | Free-space guard (stops below 15 GiB); compaction; raw stays as source of truth |
 | Dependency drift (system numpy changed between two runs before the lock) | Hashed lock, isolated venv, CI lock check; models record library versions |
@@ -107,7 +114,7 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 
 1. Read the [README](../README.md) and this page.
 2. Run the tests: `.\.venv\Scripts\python.exe -m pytest -q` (set `BLOCKPULSE_TEST_DSN` and start Postgres for the database tests; see [04](guides/04-postgres-api-dashboard.md)).
-3. Pick an item from section 3 with the owner. Ask before adding infrastructure.
+3. The project is complete; only take up an item from section 3 if the owner asks. Ask before adding infrastructure.
 4. Before stopping: update sections 2 and 3, and say what is still running (containers, a cluster).
 
 In a cloud session, the Kubernetes scripts need `K3D_CA_BUNDLE=/root/.ccr/ca-bundle.crt` ([14](guides/14-kubernetes.md#restricted-hosts)).

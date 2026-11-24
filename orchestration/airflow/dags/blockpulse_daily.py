@@ -51,7 +51,8 @@ with DAG(
     },
     tags=["blockpulse", "batch"],
 ) as dag:
-    # The last capture of a day can still be recording just after midnight: keep retrying for about 1.5 hours.
+    # The last capture of a day can still be recording just after midnight: keep retrying for about an hour
+    # (six retries with delays of 1, 2, 4, 8, 16 and 30 minutes, the last one capped by max_retry_delay).
     screen = blockpulse("screen", f"process-pending --root {ROOT} --date {DAY} --no-lake --no-compact", retries=6)
     lake = blockpulse("lake", f"process-pending --root {ROOT} --date {DAY} --no-compact")
     prepare_database = blockpulse("prepare_database", "db-init --create-database", pool=None)  # Postgres only

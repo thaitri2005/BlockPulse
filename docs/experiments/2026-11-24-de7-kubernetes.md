@@ -179,6 +179,15 @@ Added so the whole streaming path runs in the cluster. Data: 20,000 generated me
 
 CI run 18 on `main` (commit `f6303a6`): all four jobs passed. The Kubernetes job took 4 min 35 s on a GitHub-hosted Ubuntu 24.04 runner: install the locked dependencies, install k3d, create the cluster, build and load the image, run `drill k8s-enrich-kill`. That runner has no TLS-inspecting proxy and allows `oom_score_adj` writes, so this is also the first run of the scripts and the image build on an unrestricted host.
 
+## Closing changes
+
+- **Scheduled upkeep.** A CronJob (`bp-maintenance`, hourly) runs `lake-compact` on the sink's volume. Triggered once by hand in the cluster: the Job completed, with nothing left to compact (the closed hour had been compacted earlier, the open hour was skipped).
+- **A real gap in the lifecycle tests.** No test covered "a later, weaker event beats an earlier, stronger one". `test_time_outranks_event_kind` was added; with `e.event_time DESC` removed from the projection it fails, and the other four tests still pass, which is what the exercise writer had suspected.
+- **A DAG comment corrected.** Six retries with delays of 1, 2, 4, 8, 16 and 30 minutes last about an hour, not 1.5 hours.
+- **The dataset is final** (decision D32): no further AWS collection.
+
+Tests at close: 192 passed, 1 skipped.
+
 ## What DE7 did not cover
 
 - Each drill ran twice, in the cloud session, on synthetic traffic. Nothing here was run on the laptop or on recorded sessions.

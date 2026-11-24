@@ -63,6 +63,20 @@ def test_same_time_precedence_and_replacement_link(conn, tmp_path):
 
 
 @needs_postgres
+def test_time_outranks_event_kind(conn, tmp_path):
+    """Kind only breaks ties. A weaker kind seen later still wins: the projection reports the newest evidence, so a
+    'mined' followed by a later 'replaced' is superseded. Without the time ordering, 'mined' would always win."""
+    path = tmp_path / "events.jsonl"
+    write(path, [event("mined", 10), event("replaced", 20, replacement_txid="b" * 64)])
+    load_events(conn, path)
+    assert status(conn) == "superseded"
+    other = "c" * 64
+    write(path, [event("removed", 40, txid=other), event("mined", 30, txid=other)])  # file order must not matter
+    load_events(conn, path)
+    assert status(conn, other) == "removed_unknown_reason"
+
+
+@needs_postgres
 def test_reload_is_a_no_op_and_bad_rows_are_reported(conn, tmp_path):
     path = tmp_path / "events.jsonl"
     write(path, [event("added", 1), event("removed", 2), {**event("added", 3), "txid": None}, {"event_type": "added"}], "nope\n")

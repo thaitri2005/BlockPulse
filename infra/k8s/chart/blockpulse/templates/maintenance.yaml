@@ -1,0 +1,59 @@
+{{- if ge (int .Values.sink.replicas) 1 }}
+{{- $ctx := dict "root" . "component" "maintenance" -}}
+{{- $sink := include "blockpulse.name" (dict "root" . "component" "sink") -}}
+# A CronJob creates a Job on a schedule. This one merges each closed hour of the streamed lake into one file
+# (lake-compact is safe to repeat and skips the hour still being written), and optionally rebuilds Postgres from it.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "blockpulse.name" $ctx }}
+  labels: {{- include "blockpulse.labels" $ctx | nindent 4 }}
+spec:
+  schedule: {{ .Values.maintenance.schedule | quote }}
+  concurrencyPolicy: Forbid          # never two at once: a slow run is not overtaken by the next one
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      template:
+        metadata:
+          labels: {{- include "blockpulse.labels" $ctx | nindent 12 }}
+        spec:
+          restartPolicy: Never
+          securityContext:
+            fsGroup: 10001
+          # The lake volume is ReadWriteOnce: it can be mounted by several pods only on one node, so run where
+          # the sink runs.
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - topologyKey: kubernetes.io/hostname
+                  labelSelector:
+                    matchLabels: {{- include "blockpulse.selector" (dict "root" . "component" "sink") | nindent 22 }}
+          containers:
+            - name: maintenance
+              {{- include "blockpulse.appContainer" . | nindent 14 }}
+              command:
+                - sh
+                - -c
+                - >-
+                  if [ ! -d /data/lake-stream ]; then echo "nothing streamed yet"; exit 0; fi;
+                  python -m blockpulse lake-compact --lake /data/lake-stream
+                  {{- if .Values.maintenance.serveStreamedLake }}
+                  && python -m blockpulse serving-rebuild --root /data --lake /data/lake-stream
+                  {{- end }}
+              envFrom:
+                - secretRef:
+                    name: {{ include "blockpulse.name" (dict "root" . "component" "app") }}
+              volumeMounts:
+                - name: lake
+                  mountPath: /data
+              resources:
+                requests: {cpu: 50m, memory: 192Mi}
+                limits: {memory: 768Mi}
+          volumes:
+            - name: lake
+              persistentVolumeClaim:
+                claimName: lake-{{ $sink }}-0
+{{- end }}

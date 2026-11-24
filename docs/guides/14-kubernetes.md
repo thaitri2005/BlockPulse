@@ -42,7 +42,7 @@ The whole stack uses about 1.4 GiB when idle and 1.8 GiB after streaming 20,000 
 | Deployment | For interchangeable pods with no state: any number, any order |
 | PersistentVolumeClaim | Storage that exists independently of a pod. Deleting the pod keeps the data |
 | Service | A stable name in front of pods. A *headless* Service gives each pod its own DNS name, which Kafka needs |
-| Job | Runs a pod until it succeeds, retrying on failure |
+| Job, CronJob | A Job runs a pod until it succeeds, retrying on failure; a CronJob creates a Job on a schedule |
 | Secret, ConfigMap | Settings kept outside the image: passwords and connection strings; ordinary files and values |
 | Probes | *Startup* waits out a slow boot; *readiness* removes a pod from its Service without restarting it; *liveness* restarts a container that stopped responding |
 | Requests, limits | What the scheduler reserves; the ceiling. Over a memory limit the container is killed |
@@ -62,6 +62,7 @@ Defaults in `values.yaml` mirror `compose.yaml` (same images, same memory ceilin
 | `bp-api` | Deployment, 2 pods, Service | `blockpulse serve` |
 | `bp-worker` | Deployment, 0 or 1 pod | `blockpulse kafka-enrich`; off by default, `--set worker.replicas=1` to start. Like the sink, it creates the topics in an init container before starting |
 | `bp-sink` | StatefulSet, 2 Gi volume | `blockpulse kafka-lake`: the enriched topic into lake tables on its volume; metrics on port 9108 |
+| `bp-maintenance` | CronJob, hourly | `lake-compact` on the sink's volume; with `--set maintenance.serveStreamedLake=true` it also rebuilds Postgres from the streamed lake |
 | `bp-prometheus` | Deployment, Service | Scrapes the sink every 5 s; the four alert rules from `observability/prometheus/alerts.yml` |
 | `bp-grafana` | Deployment, Service | Postgres and Prometheus datasources; the overview and pipeline dashboards from ConfigMaps |
 
@@ -102,7 +103,7 @@ Measured on 2026-11-24 with 20,000 generated messages (80,000 transactions):
 | `serving-rebuild --lake` | 80,000 scores, events and transactions in Postgres in 8.1 s |
 | API | `/pipeline/status` reports 80,000 transactions, 12,714 flagged; `/alerts` returns them |
 
-The two maintenance commands run inside the sink's pod because that is where the lake volume is mounted; the pod carries the database connection string for that purpose.
+The two maintenance commands run inside the sink's pod because that is where the lake volume is mounted. The `bp-maintenance` CronJob runs the compaction every hour on the same volume (`kubectl -n blockpulse create job --from=cronjob/bp-maintenance now` triggers it by hand).
 
 ## The drills as pod kills (`src/blockpulse/k8s_drills.py`)
 
@@ -157,6 +158,7 @@ Inside a sandboxed container (a cloud development session, some CI runners) thre
 - One node and one broker: self-healing of pods, not high availability. The drills don't test a node failure, a full disk, a network partition or an out-of-memory kill.
 - `local-path` volumes live on the node; deleting the cluster deletes the data.
 - Passwords in `values.yaml` are development defaults, as in Compose.
-- Airflow is not in the chart, and there is no ingress. Compaction and the serving rebuild are run by hand with `kubectl exec`, not on a schedule.
+- Airflow is not in the chart, and there is no ingress.
+- The maintenance CronJob mounts the sink's ReadWriteOnce volume, which works because it is scheduled onto the sink's node. The scheduled serving rebuild is off by default because it replaces what Postgres serves with the streamed data only.
 - Prometheus keeps its data in the pod; replacing the pod loses the history.
 - Run only on generated traffic, in a cloud session and in CI (the worker drill on every push, on a plain Linux runner with none of the restricted-host fixes): not yet on Windows with Docker Desktop, or on recorded sessions.

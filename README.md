@@ -156,6 +156,7 @@ The last row is a result, not a failure: the evaluation exists to decide honestl
 - The streaming path writes features and rule flags to its own lake. Postgres can be rebuilt from it, but there is no continuous load, so serving is as fresh as the last rebuild.
 - One public provider's view of the mempool, with recorded gaps.
 - No labels, so no accuracy.
+- The dataset is final: 89 hours from AWS plus earlier sessions, 2.65 million transactions. No further collection is planned, so the model comparison stands as measured.
 
 ## Quick start
 

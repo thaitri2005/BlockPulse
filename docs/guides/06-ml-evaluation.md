@@ -115,3 +115,5 @@ MLflow was not adopted: the local registry covers register, gated promote and ro
 - A fee feature relative to the hour's median, so extreme fee rates become visible (a new `FEATURE_SET_VERSION`).
 - Independent labels, even a small hand-reviewed sample, so agreement can become a measurement (see the [review rubric](02-structural-rules.md#review-rubric)).
 - Gate decisions checked across several seeds.
+
+None of these needs new data, and none will get any: the dataset is final (decision D32 in the [plan](../PROJECT_PLAN.md)), so the result above is the project's answer.

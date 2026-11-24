@@ -60,6 +60,8 @@ namespace blockpulse (Helm release "bp")
   Job bp-db-init       blockpulse db-init      (migrations)   \  Helm hooks: run after every install and
   Job bp-kafka-init    blockpulse kafka-init   (topics)       /  upgrade; both apply only what is missing
 
+  CronJob bp-maintenance    hourly lake-compact on the sink's volume (optionally serving-rebuild --lake)
+
   Deployment bp-api (2 pods) --- Service bp-api:8000     blockpulse serve; reads Secret bp-app (BLOCKPULSE_DSN)
   Deployment bp-worker (0 or 1)                          blockpulse kafka-enrich; off by default
   Deployment bp-prometheus ----- Service :9090           scrapes bp-sink; alert rules from a ConfigMap
@@ -131,7 +133,7 @@ Elsewhere:
 
 | Path | What it is |
 | --- | --- |
-| `tests/` | pytest (191 tests); Postgres tests opt in with `BLOCKPULSE_TEST_DSN`; Helm chart tests need `helm`; the Kubernetes drill logic is tested with `kubectl` faked |
+| `tests/` | pytest (193 tests); Postgres tests opt in with `BLOCKPULSE_TEST_DSN`; Helm chart tests need `helm`; the Kubernetes drill logic is tested with `kubectl` faked |
 | `analytics/queries/` | Shared SQL, run by DuckDB locally and saved as Athena named queries |
 | `analytics/dbt/` | dbt project: staging, intermediate and mart models with tests, over the lake |
 | `orchestration/airflow/` | Airflow image (BlockPulse in its own venv) and the `blockpulse_daily` DAG |
@@ -169,8 +171,9 @@ Elsewhere:
 - One Kafka broker and one instance: nothing is highly available. The Kubernetes cluster has one node, so it shows self-healing of pods, not survival of a node.
 - Scoring is offline (files in, files out); no streaming feature or score worker.
 - The streamed lake reaches Postgres only through a full `serving-rebuild --lake`, not a continuous load, and it is a separate lake (`data/lake-stream`) from the batch one.
-- The stream sink makes small files (one per partition per 5-second batch). `lake-compact` merges closed hours, but nothing schedules it.
+- The stream sink makes small files (one per partition per 5-second batch) until `lake-compact` merges each closed hour.
 - Postgres is a serving copy on one 512 MB container. Incremental loads slow down as the random-keyed `lifecycle_events` index outgrows memory, so large backfills use `serving-rebuild` ([04](guides/04-postgres-api-dashboard.md#two-ways-data-gets-in)).
 - The Kafka-to-Parquet archive writes one file per message (built for restart clarity); the lake is the right-sized store.
-- The Helm chart does not include Airflow, and nothing in the cluster schedules compaction or the serving rebuild.
+- The Helm chart does not include Airflow. Compaction is scheduled in the cluster (a CronJob) but not under Compose, where it is run by hand.
 - Kubernetes has run only on generated traffic: in a cloud session, and in CI, which creates a cluster and runs one pod-kill drill on every push.
+- The dataset is final (2.65 million transactions; decision D32). Results on it will not be extended by further collection.

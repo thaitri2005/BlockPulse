@@ -22,7 +22,7 @@ The project owner is building this to learn data engineering. Optimize for their
 ## Commands (Windows, PowerShell)
 
 ```powershell
-.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/guides/04-postgres-api-dashboard.md): 154 passed, 2 skipped (one is Linux-only); without it: 136 passed, 20 skipped; on Linux with `helm` and the test database: 190 passed, 1 skipped (the 14 Helm chart tests skip without `helm`)
+.\.venv\Scripts\python.exe -m pytest -q          # with BLOCKPULSE_TEST_DSN set (see docs/guides/04-postgres-api-dashboard.md): 154 passed, 2 skipped (one is Linux-only); without it: 136 passed, 20 skipped; on Linux with `helm` and the test database: 192 passed, 1 skipped (the 15 Helm chart tests skip without `helm`)
 .\.venv\Scripts\python.exe -m blockpulse --help
 docker compose --profile m1 up -d --wait          # Kafka (1 GiB limit); `stop` when done
 docker compose --profile m2 up -d --wait          # Postgres + Grafana + Prometheus (~1.1 GB); `stop` when done
@@ -59,6 +59,7 @@ CI fails if the lock doesn't match `pyproject.toml`. The AWS bundle ships the sa
 
 ## Conventions
 
+- **The project is complete and its dataset is final (decision D32): no further AWS collection.** Don't propose one; work with the data that exists.
 - **Never run `terraform apply` or `destroy`, or create anything in AWS, from an agent session.** Prepare and test; the owner deploys (decision D17).
 - Files that run on Linux (`*.sh`, systemd units, `*.tf`, templates) must have LF line endings. Python's `write_text` on Windows writes CRLF unless you pass `newline="\n"`; `.gitattributes` and the bundle builder guard against it.
 - `data/` is git-ignored local evidence. Never delete or overwrite run directories; commands create new ones.
