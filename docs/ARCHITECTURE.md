@@ -60,7 +60,7 @@ Design rules that hold everywhere:
 | Unattended collection | `collect`, `collect-loop`, `process-pending` (`--date` for one day), `sync-pending`, `compact-raw` | [07](guides/07-collection.md), [08](guides/08-aws.md) |
 | Orchestration | Airflow DAG `blockpulse_daily` in the `airflow` Compose profile; `airflow backfill create` | [13](guides/13-airflow.md) |
 | Kubernetes | `infra/k8s/cluster-up.sh`, `infra/k8s/image-load.sh`, `helm upgrade --install bp infra/k8s/chart/blockpulse` | [14](guides/14-kubernetes.md) |
-| Load test and drills | `benchmark batch`, `benchmark streaming`, `drill enrich-crash`, `drill broker-restart`, `drill postgres-crash`; on Kubernetes `drill k8s-enrich-kill`, `drill k8s-broker-kill`; `synth-capture` for generated traffic | [09](guides/09-load-test.md), [10](guides/10-failure-drills.md) |
+| Load test and drills | `benchmark batch`, `benchmark streaming`, `drill enrich-crash`, `drill broker-restart`, `drill postgres-crash`; on Kubernetes `drill k8s-enrich-kill`, `drill k8s-broker-kill`, `drill k8s-postgres-kill`; `synth-capture` for generated traffic | [09](guides/09-load-test.md), [10](guides/10-failure-drills.md) |
 
 ## Code
 
@@ -88,7 +88,7 @@ Python package `src/blockpulse/` (about 4,500 lines, flat on purpose):
 | `collector.py` | 359 | Capture loop, idempotent session processing (all pending, or one start date), lock, S3 upload |
 | `benchmark.py` | 198 | Batch and streaming load tests on recorded sessions (`benchmark`) |
 | `drills.py` | 201 | Failure drills: worker crash, broker restart, Postgres crash (`drill`) |
-| `k8s_drills.py` | 195 | The same drills as pod kills in a k3d cluster (`drill k8s-*`) |
+| `k8s_drills.py` | 316 | The same drills as pod kills in a k3d cluster (`drill k8s-*`) |
 | `synth.py` | 66 | Deterministic synthetic capture sessions for drills (`synth-capture`) |
 | `cli.py` | 572 | Command-line entry point |
 
@@ -124,7 +124,7 @@ Elsewhere:
 | Modelling | dbt-core 1.12 with dbt-duckdb | Marts and data tests over the lake |
 | Serving | PostgreSQL 17, FastAPI, Grafana 12 | Read-only API |
 | Orchestration | Apache Airflow 3.3 (standalone, LocalExecutor, SQLite metadata) | Tasks call the `blockpulse` CLI from a separate venv; a one-slot pool guards the data root |
-| Kubernetes (in progress) | k3d (k3s 1.31) and Helm 3 | The serving stack as StatefulSets, Deployments and Jobs; defaults mirror `compose.yaml` |
+| Kubernetes | k3d (k3s 1.31) and Helm 3 | The serving stack as StatefulSets, Deployments and Jobs; defaults mirror `compose.yaml` |
 | Metrics | Prometheus 3.5, prometheus-client | Scrapes the stream sink every 5 s; alert rules for lag, freshness, quarantine, sink down |
 | ML | scikit-learn Isolation Forest | Local append-only registry instead of MLflow |
 | Infrastructure | Terraform (AWS provider 6.x), systemd on Amazon Linux 2023 | No inbound ports, Session Manager, self-expiring |

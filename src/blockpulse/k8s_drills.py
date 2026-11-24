@@ -23,8 +23,8 @@ BOOTSTRAP = f"{RELEASE}-kafka-0.{RELEASE}-kafka:9092"
 WORKER_SELECTOR = "app.kubernetes.io/component=worker"
 
 
-def _run(*command: str, timeout: float = 300, check: bool = True) -> subprocess.CompletedProcess:
-    result = subprocess.run(command, capture_output=True, text=True, timeout=timeout)
+def _run(*command: str, timeout: float = 300, check: bool = True, stdin: str | None = None) -> subprocess.CompletedProcess:
+    result = subprocess.run(command, capture_output=True, text=True, timeout=timeout, input=stdin)
     if check and result.returncode != 0:
         raise RuntimeError(f"{' '.join(command[:4])} ... failed ({result.returncode}): {result.stderr.strip()[-600:]}")
     return result
@@ -202,3 +202,115 @@ def drill_broker_kill(*, messages: int = 30000, sessions: int = 3, keep: bool = 
     return _report("k8s-broker-kill", started, checks, published=published, sessions=sessions, data="synthetic",
                    install_seconds=install_seconds, committed_at_kill=at_kill and at_kill["committed"],
                    broker_ready_after_seconds=broker_back_after, worker_survived=survived, **facts)
+
+
+# ---------------------------------------------------------------- Postgres drill
+
+POSTGRES_POD = f"{RELEASE}-postgres-0"
+TRANSACTIONS_PER_MESSAGE = 4
+
+
+def _psql(sql: str) -> str | None:
+    """One value from Postgres, or None while it can't answer."""
+    result = _kubectl("exec", POSTGRES_POD, "--", "psql", "-U", "blockpulse", "-d", "blockpulse", "-qAtc", sql, check=False, timeout=30)
+    return result.stdout.strip() if result.returncode == 0 else None
+
+
+def _scores(run_id: str) -> int | None:
+    value = _psql(f"SELECT count(*) FROM scores WHERE run_id = '{run_id}'")
+    return int(value) if value is not None and value.isdigit() else None
+
+
+def _load_in_progress() -> bool:
+    """True while another session has a transaction open in the database: the loader is inside its load."""
+    return _psql("SELECT count(*) FROM pg_stat_activity WHERE datname = 'blockpulse' AND pid <> pg_backend_pid() "
+                 "AND xact_start IS NOT NULL AND state <> 'idle'") not in (None, "", "0")
+
+
+def load_job_manifest(name: str, run_id: str, messages: int, image: str = "blockpulse:dev") -> dict:
+    """A Job that builds one screened session from synthetic traffic and loads it. Every attempt is a new pod
+    (restartPolicy Never), and the data is regenerated from the same seed, so a retry loads identical rows."""
+    shell = (f"python -m blockpulse synth-capture --output /tmp/s --messages {messages} --seed 11 "
+             f"--transactions-per-message {TRANSACTIONS_PER_MESSAGE} >/dev/null && "
+             "python -m blockpulse process /tmp/s/messages.jsonl --output /tmp/p >/dev/null && "
+             "python -m blockpulse detect /tmp/p/features.jsonl --output /tmp/d >/dev/null && "
+             f"python -m blockpulse load-results /tmp/d --run-id {run_id}")
+    container = {"name": "load", "image": image, "imagePullPolicy": "IfNotPresent", "command": ["sh", "-c", shell],
+                 "envFrom": [{"secretRef": {"name": f"{RELEASE}-app"}}],
+                 "securityContext": {"runAsNonRoot": True, "allowPrivilegeEscalation": False}}
+    return {"apiVersion": "batch/v1", "kind": "Job", "metadata": {"name": name, "namespace": NAMESPACE},
+            "spec": {"backoffLimit": 6, "template": {"spec": {"restartPolicy": "Never", "containers": [container]}}}}
+
+
+def _start_load(name: str, run_id: str, messages: int) -> None:
+    _run("kubectl", "apply", "-f", "-", stdin=json.dumps(load_job_manifest(name, run_id, messages)))
+
+
+def _job_pods(name: str) -> list[dict]:
+    items = json.loads(_kubectl("get", "pods", "-l", f"job-name={name}", "-o", "json").stdout)["items"]
+    return [{"name": p["metadata"]["name"], "phase": p["status"].get("phase")} for p in items]
+
+
+def _job_done(name: str, timeout: float = 900) -> bool:
+    return _kubectl("wait", "--for=condition=complete", f"job/{name}", f"--timeout={int(timeout)}s", check=False,
+                    timeout=timeout + 30).returncode == 0
+
+
+def _load_summary(name: str) -> dict:
+    logs = _kubectl("logs", f"job/{name}", check=False).stdout
+    try:
+        return json.loads(logs[logs.index("{"):logs.rindex("}") + 1])
+    except ValueError:
+        return {}
+
+
+def drill_postgres_kill(*, messages: int = 50000, keep: bool = False) -> dict:
+    """Crash a Postgres load two ways: kill the loader's pod inside its transaction, then kill the Postgres pod
+    under a second load. Each time the Job controller retries, and the rows must end up present exactly once."""
+    started, checks = time.monotonic(), []
+    install_seconds = install()
+    rows = messages * TRANSACTIONS_PER_MESSAGE
+    run_a, run_b = "drill-kill", "drill-restart"
+
+    _start_load("load-a", run_a, messages)
+    in_transaction = _wait(_load_in_progress, 600, interval=0.2)
+    victims = [p for p in _job_pods("load-a") if p["phase"] == "Running"]
+    for pod in victims:
+        _kubectl("delete", "pod", pod["name"], "--grace-period=0", "--force", check=False)
+    _check(checks, "loader pod was killed inside its load transaction", bool(in_transaction and victims),
+           {"killed": [p["name"] for p in victims]})
+    visible = _wait(lambda: (count := _scores(run_a)) is not None and {"rows": count}, 60)
+    _check(checks, "atomic: nothing from the killed load is visible", bool(visible) and visible["rows"] == 0, visible)
+    finished = _job_done("load-a")
+    pods = _job_pods("load-a")
+    _check(checks, "the Job retried in a new pod and loaded every row exactly once",
+           finished and _scores(run_a) == rows and len(pods) >= 1 and not {p["name"] for p in pods} & {p["name"] for p in victims},
+           {"rows": rows, "loaded": _scores(run_a), "inserted": _load_summary("load-a").get("inserted"), "pods_now": pods})
+    _start_load("load-a-again", run_a, messages)
+    again_done = _job_done("load-a-again")
+    again = _load_summary("load-a-again")
+    _check(checks, "a second load of the same run inserts nothing (idempotent)",
+           again_done and again.get("inserted") == 0 and _scores(run_a) == rows,
+           {"inserted": again.get("inserted"), "duplicates": again.get("duplicates")})
+
+    _start_load("load-b", run_b, messages)
+    in_transaction = _wait(_load_in_progress, 600, interval=0.2)
+    killed_at = time.monotonic()
+    _kubectl("delete", "pod", POSTGRES_POD, "--grace-period=0", "--force", check=False)
+    time.sleep(2)
+    back = _kubectl("wait", "--for=condition=Ready", f"pod/{POSTGRES_POD}", "--timeout=180s", check=False).returncode == 0
+    postgres_back_after = round(time.monotonic() - killed_at, 1)
+    visible = _wait(lambda: (count := _scores(run_b)) is not None and {"rows": count}, 60)
+    failed = _wait(lambda: [p for p in _job_pods("load-b") if p["phase"] == "Failed"], 120)
+    _check(checks, "Postgres pod was killed mid-load, came back on its volume, and that load attempt failed",
+           bool(in_transaction and back and failed), {"postgres_ready_after_seconds": postgres_back_after,
+                                                      "failed_attempts": [p["name"] for p in failed or []]})
+    _check(checks, "atomic: nothing from the interrupted load is visible", bool(visible) and visible["rows"] == 0, visible)
+    finished = _job_done("load-b")
+    _check(checks, "the Job retried after Postgres returned and loaded every row exactly once",
+           finished and _scores(run_b) == rows, {"rows": rows, "loaded": _scores(run_b), "attempts": len(_job_pods("load-b"))})
+    _check(checks, "the earlier run survived the Postgres kill intact", _scores(run_a) == rows, {"rows": _scores(run_a)})
+    if not keep:
+        remove()
+    return _report("k8s-postgres-kill", started, checks, rows=rows, data="synthetic", install_seconds=install_seconds,
+                   postgres_ready_after_seconds=postgres_back_after)

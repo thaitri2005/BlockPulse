@@ -209,7 +209,8 @@ def build_parser() -> argparse.ArgumentParser:
     bench.add_argument("--bootstrap-servers", default=DEFAULT_BOOTSTRAP_SERVERS)
     bench.add_argument("--output", type=Path, default=Path("data/benchmarks"))
     drill = commands.add_parser("drill", help="Failure drills: crash a component mid-run and verify no loss or duplicates")
-    drill.add_argument("name", choices=("enrich-crash", "broker-restart", "postgres-crash", "kafka-verify", "k8s-enrich-kill", "k8s-broker-kill"),
+    drill.add_argument("name", choices=("enrich-crash", "broker-restart", "postgres-crash", "kafka-verify",
+                                        "k8s-enrich-kill", "k8s-broker-kill", "k8s-postgres-kill"),
                        help="k8s-* drills kill pods in a k3d cluster (docs/guides/14-kubernetes.md); kafka-verify checks the topics only")
     drill.add_argument("--root", type=Path, default=Path("data"))
     drill.add_argument("--sessions", default="session-aws-20261017T0", help="Session name prefix for the Kafka drills")
@@ -220,7 +221,7 @@ def build_parser() -> argparse.ArgumentParser:
     drill.add_argument("--admin-dsn", default="postgresql://blockpulse:blockpulse_dev@127.0.0.1:5432/blockpulse",
                        help="Used only to create and drop the separate blockpulse_drill database")
     drill.add_argument("--output", type=Path, default=Path("data/drills"))
-    drill.add_argument("--messages", type=int, default=30000, help="k8s drills: synthetic messages to generate and replay")
+    drill.add_argument("--messages", type=int, help="k8s drills: synthetic messages (default 30000 for the Kafka drills, 50000 for Postgres)")
     drill.add_argument("--published", type=int, help="kafka-verify: how many messages were published")
     drill.add_argument("--keep", action="store_true", help="k8s drills: leave the drill namespace in place afterwards")
     synth = commands.add_parser("synth-capture", help="Generate a synthetic capture session for drills and load tests (labelled synthetic)")
@@ -526,8 +527,9 @@ def _main(argv: list[str] | None = None) -> int:
                 report = drills.verify_kafka(args.bootstrap_servers, args.published, args.output / "archive")
             elif args.name.startswith("k8s-"):
                 from blockpulse import k8s_drills
-                run = k8s_drills.drill_enrich_kill if args.name == "k8s-enrich-kill" else k8s_drills.drill_broker_kill
-                report = run(messages=args.messages, keep=args.keep)
+                run = {"k8s-enrich-kill": k8s_drills.drill_enrich_kill, "k8s-broker-kill": k8s_drills.drill_broker_kill,
+                       "k8s-postgres-kill": k8s_drills.drill_postgres_kill}[args.name]
+                report = run(keep=args.keep, **({"messages": args.messages} if args.messages else {}))
             else:
                 sessions = sorted(p for p in (args.root / "raw").glob(f"{args.sessions}*") if (p / "summary.json").is_file())[:args.limit]
                 if not sessions:

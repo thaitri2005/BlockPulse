@@ -19,9 +19,10 @@ A flag means *unusual structure*. It is not a fraud probability or evidence of w
 | **Reproducible evaluation** | Checksummed manifests with chronological splits, Isolation Forest, threshold calibration, synthetic sweep, gated detector registry | Two recorded runs rebuild exactly (6 of 6 checks); rules stay champion on 2.65 M rows ([06](docs/guides/06-ml-evaluation.md)) |
 | **Load test** | Batch and streaming benchmarks on recorded traffic; found and fixed a per-message commit bottleneck | A day of traffic in 5.8 min (about 250x real time); enrichment 86 to 152 msg/s, p50 latency 72 s to 0.16 s ([09](docs/guides/09-load-test.md)) |
 | **Failure drills** | Hard-kill the enrichment worker, restart the broker, crash a Postgres load mid-transaction | All pass: 0 messages lost, duplicates absorbed by idempotent sinks; the worker now survives a broker restart; two bugs found and fixed ([10](docs/guides/10-failure-drills.md)) |
-| **Testing and CI** | A hashed lock file for every dependency, 156 pytest tests, Terraform tests with a mocked AWS provider, Amazon Linux 2023 + systemd rehearsals, GitHub Actions | All green on GitHub Actions ([workflow](.github/workflows/ci.yml)) |
+| **Kubernetes** | A k3d cluster from one script; a Helm chart for Postgres and Kafka (StatefulSets with volumes), the API, the worker and Grafana, with probes, requests and limits; the drills rerun as pod kills | Installs from nothing in 19 s; three pod-kill drills pass on synthetic traffic: 0 of 30,000 messages lost, 200,000 rows loaded exactly once, with controllers doing every restart ([14](docs/guides/14-kubernetes.md)) |
+| **Testing and CI** | A hashed lock file for every dependency, 180 pytest tests, Terraform tests with a mocked AWS provider, Amazon Linux 2023 + systemd rehearsals, GitHub Actions | All green on GitHub Actions ([workflow](.github/workflows/ci.yml)) |
 
-**Not done yet:** Kubernetes. No accuracy figures exist, because there are no labels. See the [plan](docs/PROJECT_PLAN.md) for status and order.
+The Kubernetes results are from generated traffic in a single-node cluster, not from the recorded dataset. No accuracy figures exist, because there are no labels. See the [plan](docs/PROJECT_PLAN.md) for status and order.
 
 ## Quick start (offline, a few minutes)
 
@@ -65,7 +66,7 @@ The regional node is passed explicitly because the default host times out from s
 | [11 · dbt](docs/guides/11-dbt.md) | Models, tests, lineage and results on the lake |
 | [12 · Streaming lake and metrics](docs/guides/12-streaming-lake-and-metrics.md) | Kafka to the lake with exactly-once output; Prometheus, alerts, pipeline dashboard |
 | [13 · Airflow](docs/guides/13-airflow.md) | The daily DAG, retries, pools, backfills, and what failed on the first run |
-| [14 · Kubernetes](docs/guides/14-kubernetes.md) | In progress: a k3d cluster and a Helm chart for the serving stack; pod-kill drills are next |
+| [14 · Kubernetes](docs/guides/14-kubernetes.md) | A k3d cluster, a Helm chart for the serving stack, and the drills rerun as pod kills |
 | [Experiments](docs/experiments/) | Dated measurements behind every claim |
 | [Learning path](docs/learning/README.md) | Exercises through the code |
 

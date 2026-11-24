@@ -29,9 +29,9 @@ What the project will not claim:
 | DE4 · dbt on the lake | Done | 8 models, 28 tests, `dbt build` in 1.5 min on 2.65 M transactions; marts reproduce the shared queries exactly and agree with Postgres on every status ([11](guides/11-dbt.md)) |
 | DE5 · Streaming into the lake, with metrics | Done | `kafka-lake` sink: 13,707 messages to 207,913 transactions and 466,920 events, row-for-row identical to the batch lake; Prometheus metrics, 4 alert rules, Grafana pipeline dashboard ([12](guides/12-streaming-lake-and-metrics.md)) |
 | DE6 · Airflow orchestration | Done | DAG per UTC day (screen, lake, load, dbt build) with retries and a one-slot pool; a 3-day backfill equals the direct run row for row in the lake, the marts and Postgres; a Postgres outage recovered by retry; four real failures found and fixed ([13](guides/13-airflow.md)) |
-| DE7 · Kubernetes | In progress | DE7a–c done: a k3d cluster created by one script (also inside a restricted cloud container) and a Helm chart for Postgres, Kafka, the API, the worker and Grafana; installs from nothing in 19 s, about 1.4 GiB. DE7d: the worker and broker pod-kill drills pass on 30,000 synthetic messages (0 lost; a new worker pod in 2.3 s, the broker back in 6.5 s with the worker surviving); the Postgres pod-kill drill is next ([14](guides/14-kubernetes.md), [log](experiments/2026-11-24-de7-kubernetes.md)) |
+| DE7 · Kubernetes | Done (cloud session, synthetic data) | A k3d cluster from one script and a Helm chart for Postgres, Kafka, the API, the worker and Grafana: installs from nothing in 19 s, about 1.4 GiB. Three pod-kill drills pass with the invariants of [10](guides/10-failure-drills.md): 0 of 30,000 messages lost when the worker or the broker pod is killed, 200,000 rows loaded exactly once when the loader or the Postgres pod is killed. Open: a run on the laptop ([14](guides/14-kubernetes.md), [log](experiments/2026-11-24-de7-kubernetes.md)) |
 
-Tests (2026-10-20): 154 passed and 2 skips (one Linux-only) with the Postgres test database; Terraform 9 of 9 with a mocked provider; Amazon Linux 2023 container rehearsals all pass; CI green. Rechecked 2026-11-24 on Linux after a five-week pause: 155 passed, 1 skipped, lint clean, lock unchanged; 176 passed, 1 skipped, of which 11 Helm chart tests skip without `helm`.
+Tests (2026-10-20): 154 passed and 2 skips (one Linux-only) with the Postgres test database; Terraform 9 of 9 with a mocked provider; Amazon Linux 2023 container rehearsals all pass; CI green. Rechecked 2026-11-24 on Linux after a five-week pause: 155 passed, 1 skipped, lint clean, lock unchanged; 179 passed, 1 skipped, of which 11 Helm chart tests skip without `helm`; CI green on `main`.
 
 ## 3. Roadmap
 
@@ -67,7 +67,7 @@ The audit after DE3 found that the serving layer held 16,770 of 2.65 M rows, loa
 | **DE4 · dbt on the lake** | dbt-duckdb over the lake: staging, intermediate lifecycle, marts, tests, docs and lineage, `dbt build` in CI | `dbt build` green locally and in CI; marts reproduce the shared queries | Laptop | **Done** 2026-10-20 ([11](guides/11-dbt.md)) |
 | **DE5 · One pipeline: streaming into the lake, with metrics** | A Kafka consumer that writes the enriched topic into the same lake tables (hourly files, same contract and quality gate) instead of one Parquet file per message; Prometheus metrics (consumer lag, throughput, error and quarantine rates, data freshness) scraped by Prometheus in the `m2` profile and charted in Grafana; alert rules for lag and freshness | Lake built from the stream equals the lake built from files for the same sessions (row-level check); dashboards show lag and freshness live during a replay | Laptop for build and short replays | **Done** 2026-10-20 ([12](guides/12-streaming-lake-and-metrics.md)) |
 | **DE6 · Airflow orchestration** | A DAG per date partition: process, screen, lake, load, dbt build; retries; a demonstrated backfill of past dates; runs in the existing Compose stack | A backfill of 3 past days produces the same lake and marts as the direct run; a deliberately failed task retries and recovers | Laptop | **Done** 2026-10-20 ([13](guides/13-airflow.md)) |
-| **DE7 · Kubernetes** | k3d cluster; a Helm chart for Kafka (Strimzi or Redpanda), Postgres (StatefulSet with a volume), API, Grafana; probes, requests and limits; the drills rerun as pod kills | Chart installs from scratch; pod-kill drills pass with the same invariants as [10](guides/10-failure-drills.md) | Cloud session or laptop (D30); optional k3s-on-EC2 demo on AWS, then destroy | **In progress**: DE7a–c and the Kafka drills of DE7d done 2026-11-24 ([14](guides/14-kubernetes.md)) |
+| **DE7 · Kubernetes** | k3d cluster; a Helm chart for Kafka (a plain StatefulSet, D29), Postgres (StatefulSet with a volume), API, worker, Grafana; probes, requests and limits; the drills rerun as pod kills | Chart installs from scratch; pod-kill drills pass with the same invariants as [10](guides/10-failure-drills.md) | Cloud session (D30); not yet run on the laptop | **Done** 2026-11-24 ([14](guides/14-kubernetes.md)) |
 
 ### Optional, not scheduled
 
@@ -83,14 +83,17 @@ Deliberately avoided: managed Kafka (MSK), EKS and RDS (each costs more per mont
 
 **Next session:**
 
-1. Start the environment (three commands, in [14](guides/14-kubernetes.md#quick-start)): `cluster-up.sh`, `image-load.sh`, `helm upgrade --install`. In a cloud session prefix the two scripts with `K3D_CA_BUNDLE=/root/.ccr/ca-bundle.crt`.
-2. DE7d, last part: the Postgres drill as pod kills (a load Job whose pod is killed mid-transaction, then the Postgres pod killed mid-load), with the invariants of drill 3 in [10](guides/10-failure-drills.md). Then mark DE7 done and add its row to the README table.
-3. On the laptop: build the image and run both Kafka drills once without the proxy settings; delete the stray branch `claude/gallant-ptolemy-866nd6` on GitHub.
-4. Small follow-ups for the chart: Prometheus and the pipeline dashboard; a CI job that installs the chart in k3d and runs a drill.
-5. Optional, small: hourly compaction of the streamed lake's small files; incremental dbt models so a daily run rebuilds only its day.
-6. Optional: run the Airflow DAG on the AWS instance instead of the laptop (it sleeps; see [13](guides/13-airflow.md)).
+The roadmap DE1–DE7 is complete. What is left is confirmation and optional work; pick with the owner.
 
-The running record of DE7 is [experiments/2026-11-24-de7-kubernetes.md](experiments/2026-11-24-de7-kubernetes.md).
+1. On the laptop: build the image and run the three Kubernetes drills once without the proxy settings ([14](guides/14-kubernetes.md#quick-start)). Delete the stray branch `claude/gallant-ptolemy-866nd6` on GitHub.
+2. Small follow-ups for the chart: a CI job that creates a k3d cluster, installs the chart and runs one drill; Prometheus and the pipeline dashboard.
+3. Optional, small: hourly compaction of the streamed lake's small files; incremental dbt models so a daily run rebuilds only its day.
+4. Optional: run the Airflow DAG on the AWS instance instead of the laptop (it sleeps; see [13](guides/13-airflow.md)).
+5. The unscheduled items in the table above (hand-labelled sample, fee feature, a longer AWS collection).
+
+To resume in a cloud session: `K3D_CA_BUNDLE=/root/.ccr/ca-bundle.crt bash infra/k8s/cluster-up.sh`, the same prefix for `image-load.sh`, then `helm upgrade --install` as in the guide. Tool versions are in the log.
+
+The record of DE7 is [experiments/2026-11-24-de7-kubernetes.md](experiments/2026-11-24-de7-kubernetes.md).
 
 ## 4. Decisions
 

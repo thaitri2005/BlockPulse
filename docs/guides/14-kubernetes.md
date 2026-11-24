@@ -1,13 +1,13 @@
 # 14 · Kubernetes: the same pipeline as pods
 
-DE7 moves the serving stack from Docker Compose to Kubernetes, then reruns the failure drills by killing pods. The running log with every measurement is [the DE7 experiment report](../experiments/2026-11-24-de7-kubernetes.md).
+DE7 moves the serving stack from Docker Compose to Kubernetes, then reruns the failure drills by killing pods. All four steps are done; every number here comes from generated data in a single-node k3d cluster. The running log with every measurement is [the DE7 experiment report](../experiments/2026-11-24-de7-kubernetes.md).
 
 | Step | What | Status |
 | --- | --- | --- |
 | DE7a | A local cluster that can run pods (`infra/k8s/`) | Done 2026-11-24 |
 | DE7b | Helm chart: Postgres and Kafka as StatefulSets with volumes, probes, requests and limits | Done 2026-11-24 |
 | DE7c | BlockPulse image; migrations and topics as Jobs; API, enrichment worker and Grafana as Deployments | Done 2026-11-24 |
-| DE7d | Drills rerun as pod kills, same invariants as [guide 10](10-failure-drills.md) | Kafka drills done 2026-11-24; the Postgres drill is next |
+| DE7d | Drills rerun as pod kills, same invariants as [guide 10](10-failure-drills.md) | Done 2026-11-24: all three pass |
 
 ## Quick start
 
@@ -122,11 +122,12 @@ Nobody restarted the killed pods: the StatefulSet controller saw a missing pod a
 The same invariant as [guide 10](10-failure-drills.md): after a crash, nothing is lost and every input is represented exactly once where it matters. What changes is who recovers. In Compose the drill killed a process and then started it again itself. Here the drill only deletes a pod, with `--grace-period=0 --force` so the container gets SIGKILL and no clean shutdown; a controller replaces it, and the drill waits and checks.
 
 ```bash
-python -m blockpulse drill k8s-enrich-kill      # about 3.5 min each, cluster and image must exist (steps 1-2 above)
-python -m blockpulse drill k8s-broker-kill
+python -m blockpulse drill k8s-enrich-kill      # about 3.5 min; the cluster and image must exist (steps 1-2 above)
+python -m blockpulse drill k8s-broker-kill      # about 3.5 min
+python -m blockpulse drill k8s-postgres-kill    # about 4.5 min
 ```
 
-Each drill:
+Reports go to `data/drills/`, like the Compose drills. Each Kafka drill:
 
 1. Installs the chart into its own namespace, `blockpulse-drill`, so the topics start empty, and deletes the namespace at the end (`--keep` leaves it for inspection). Installing from nothing on every run is also the "chart installs from scratch" check.
 2. Generates traffic inside the cluster: a pod runs `blockpulse synth-capture` for three sessions and replays them into the raw topic. One session maps to one partition, because the record key is the session.
@@ -155,9 +156,28 @@ Both passed on the first run. The 413 duplicates are the messages the killed wor
 
 Compared with [guide 10](10-failure-drills.md): the invariants and the worker code are the same; the traffic is synthetic instead of recorded (30,000 messages instead of 4,641), so the counts are not comparable, only the pass or fail of each check.
 
+### The Postgres drill
+
+`k8s-postgres-kill` crashes a load two ways, like drill 3 in guide 10. The load is a Kubernetes Job: a pod generates one synthetic session, processes and screens it, and runs `load-results`. The Job uses `restartPolicy: Never`, so every retry is a new pod, and the same seed, so every attempt loads identical rows.
+
+The kill is triggered when Postgres reports another session with an open transaction (`pg_stat_activity`), which is the loader inside its load.
+
+| Check (200,000 synthetic rows per run) | Result |
+| --- | --- |
+| Loader pod force-deleted inside its transaction | Nothing from the killed load visible: 0 rows |
+| Job controller retried in a new pod | 200,000 inserted, exactly the session's rows |
+| Same run loaded again by a second Job | 0 inserted, 200,000 recognized as duplicates |
+| Postgres pod force-deleted under a second load | Ready again on its volume after 3.3 s; that load attempt failed; 0 rows visible |
+| Job retried after Postgres returned | 200,000 loaded exactly once, in 2 attempts |
+| Rows of the first run after the Postgres kill | Still 200,000 |
+
+Passed on the first run, 268 s from install to teardown. As in Compose, the guarantees come from the loader and the schema (one transaction per session, a unique key that makes reruns harmless). Kubernetes adds the retry: nobody reran the load.
+
 ## Limits
 
 - One node and one broker: this shows scheduling, self-healing and configuration, not high availability.
 - `local-path` volumes live on the node. Deleting the cluster deletes the data.
 - Passwords in `values.yaml` are development defaults, as in Compose.
 - No Prometheus or Airflow in the chart yet, and no ingress.
+- Each drill was run once, on synthetic traffic, in a cloud session. They have not been run on the laptop or in CI yet.
+- The drills force-delete pods. They don't test a node failure, a full disk, a network partition, or a container killed for exceeding its memory limit.

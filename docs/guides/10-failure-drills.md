@@ -60,7 +60,7 @@ Each session loads in one transaction, so a crash leaves nothing behind, and the
 
 ## The same drills on Kubernetes
 
-The Kafka drills also run as pod kills in a k3d cluster, where a controller does the restarting instead of the drill: see [guide 14](14-kubernetes.md#the-drills-as-pod-kills-srcblockpulsek8s_drillspy). They use generated traffic, so their counts are not comparable with the ones above.
+All three drills also run as pod kills in a k3d cluster, where a controller does the restarting instead of the drill: see [guide 14](14-kubernetes.md#the-drills-as-pod-kills-srcblockpulsek8s_drillspy). They use generated traffic, so their counts are not comparable with the ones above.
 
 ## Limits
 

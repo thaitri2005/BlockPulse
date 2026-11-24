@@ -1,6 +1,6 @@
 # DE7 · Kubernetes: session log and measurements
 
-Started 2026-11-24, after a five-week pause (last commit 2026-10-20). This file is the running record of DE7: what was done, what was measured, what broke. The how-to is [guide 14](../guides/14-kubernetes.md).
+Status: DE7a–d done on 2026-11-24. Started 2026-11-24, after a five-week pause (last commit 2026-10-20). This file is the running record of DE7: what was done, what was measured, what broke. The how-to is [guide 14](../guides/14-kubernetes.md).
 
 ## Where this work runs
 
@@ -93,7 +93,7 @@ Pushes were refused (HTTP 403) until the owner installed the Claude GitHub App o
 
 CI run 13 on `main` (commit `d34c9ce`) passed all three jobs: Python tests with Postgres, Terraform, and the instance rehearsal, whose shellcheck step now covers `infra/k8s/*.sh`. Not confirmed: whether the 11 Helm chart tests ran or skipped there; the job passes either way, and the log tail did not show the pytest summary.
 
-## DE7d · Pod-kill drills (Kafka)
+## DE7d · Pod-kill drills: Kafka
 
 Data: synthetic, generated in the cluster by `blockpulse synth-capture` (3 sessions of 10,000 messages, 4 transactions each, seeds 1–3). Check on the generator first: 2,000 messages processed by `blockpulse process` gave 8,000 features, 0 issues, 0 incomplete transactions; two runs with the same seed were byte-identical (5.65 MB).
 
@@ -115,3 +115,28 @@ Most of each drill's 200 s is not the failure: it is generating and publishing t
 One run of each. The committed offset at the kill was 9,001 in both because the kill is triggered by the first poll that sees any commit, and the worker's first checkpoints land at the same place on the same data; it is not a coincidence worth reading into.
 
 Tests after this step: 176 passed, 1 skipped (5 for the generator, 5 for the drill logic with `kubectl` and `helm` faked).
+
+## DE7d · Pod-kill drills: Postgres
+
+Data: synthetic, 50,000 messages with 4 transactions each (seed 11), giving 200,000 screened rows per run. Timing of the stages outside the cluster first, to size the kill window: generate 5.0 s, process 18.8 s, screen 9.1 s, load 11.5 s.
+
+`k8s-postgres-kill`: passed, 8 of 8 checks, first run, 268.4 s. Install 19.0 s.
+
+| Check | Detail |
+| --- | --- |
+| Loader pod killed inside its load transaction | `load-a-v5nxp` force-deleted when `pg_stat_activity` showed an open transaction |
+| Nothing from the killed load visible | 0 rows for `drill-kill` |
+| Job retried in a new pod | `load-a-cjphf` succeeded: 200,000 inserted, 200,000 in the table |
+| Second Job, same run | 0 inserted, 200,000 duplicates |
+| Postgres pod killed under a second load | Ready after 3.3 s; attempt `load-b-2grmg` failed; 0 rows for `drill-restart` |
+| Job retried after Postgres returned | 200,000 rows, 2 attempts |
+| First run after the Postgres kill | 200,000 rows |
+
+Tests after this step: 179 passed, 1 skipped (8 for the drill logic).
+
+## What DE7 did not cover
+
+- Each drill ran once, in the cloud session, on synthetic traffic. Nothing here was run on the laptop or on recorded sessions.
+- CI does not create a cluster, so the drills and a real chart install are not part of CI.
+- The image was built only behind the session's proxy.
+- Prometheus, the pipeline dashboard and Airflow are still Compose-only.
