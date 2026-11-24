@@ -14,6 +14,11 @@ extra=()
 if [[ -n "${K3D_CA_BUNDLE:-}" ]]; then
   extra+=(--network host --secret "id=ca,src=${K3D_CA_BUNDLE}")
 fi
+# Docker Hub limits anonymous pulls. If the base image is refused (429), use a mirror, for example
+# BLOCKPULSE_PYTHON_IMAGE=public.ecr.aws/docker/library/python:3.12-slim
+if [[ -n "${BLOCKPULSE_PYTHON_IMAGE:-}" ]]; then
+  extra+=(--build-arg "PYTHON_IMAGE=${BLOCKPULSE_PYTHON_IMAGE}")
+fi
 docker build "${extra[@]}" -f "$root/infra/k8s/Dockerfile" -t "$image" "$root"
 k3d image import "$image" -c blockpulse
 echo "loaded $image into cluster blockpulse"
