@@ -4,6 +4,8 @@ A data pipeline for the Bitcoin mempool, the pool of transactions that are broad
 
 It was built to practise data engineering on a live, messy source: replayable ingestion, a data lake with quality checks, streaming and batch paths that agree, orchestration, infrastructure as code, and measured behaviour under load and failure.
 
+**Status: complete.** The roadmap is finished, the dataset is final, and CI is green. What was decided and why is in the [plan](docs/PROJECT_PLAN.md).
+
 > A flag means *unusual transaction structure*. It is not a fraud probability or evidence of wrongdoing. There are no labels, so no accuracy figure is claimed.
 
 ## How it works
@@ -59,6 +61,7 @@ flowchart LR
     pg --> api["API"]
     pg --> grafana["Grafana"]
     prom["Prometheus"] --> sink
+    prom --> worker
     grafana --> prom
 ```
 
@@ -83,6 +86,7 @@ Measured on recorded mempool traffic unless stated. The dated reports are in [do
 | Does a backfill equal a direct run? | A 3-day Airflow backfill matched with 0 differing rows ([13](docs/guides/13-airflow.md)) |
 | How fast is it? | A day of traffic in 5.8 minutes in batch; streaming p50 latency 0.16 s ([09](docs/guides/09-load-test.md)) |
 | How fast can serving be rebuilt? | 2.65 million transactions in 10.6 minutes ([04](docs/guides/04-postgres-api-dashboard.md)) |
+| Would a stuck component be noticed? | The sink and the worker both expose lag and health; four alert rules cover down, behind, stale and quarantined ([12](docs/guides/12-streaming-lake-and-metrics.md)) |
 | What if a component is killed mid-run? | Nothing lost, nothing double-counted, in Compose and as pod kills on Kubernetes ([10](docs/guides/10-failure-drills.md), [14](docs/guides/14-kubernetes.md)) |
 | Does the model beat the rules? | No. It fails 2 of 4 promotion criteria, so the rules stay in charge ([06](docs/guides/06-ml-evaluation.md)) |
 

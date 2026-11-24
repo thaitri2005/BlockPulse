@@ -1,6 +1,6 @@
 # Architecture
 
-What is built, how the pieces connect, and where the code lives. The [README](../README.md) gives the short version and the results; for why, see the [plan](PROJECT_PLAN.md); for how to run each part, see the [guides](guides/). Last reviewed 2026-11-24.
+What is built, how the pieces connect, and where the code lives. The [README](../README.md) gives the short version and the results; for why, see the [plan](PROJECT_PLAN.md); for how to run each part, see the [guides](guides/). Last reviewed 2026-11-24, when the project was closed.
 
 ## Data flow
 
@@ -71,6 +71,7 @@ flowchart LR
         api --> pg
         graf --> pg
         graf --> prom --> sink
+        prom --> worker
     end
 ```
 
@@ -115,7 +116,7 @@ The principles are stated in the [README](../README.md#design-principles). What 
 
 ## Code
 
-Python package `src/blockpulse/` (about 6,200 lines, flat on purpose):
+Python package `src/blockpulse/` (about 6,400 lines, flat on purpose):
 
 | Module | Lines | Role |
 | --- | ---: | --- |
@@ -125,8 +126,8 @@ Python package `src/blockpulse/` (about 6,200 lines, flat on purpose):
 | `process.py` | 131 | Capture JSONL to events, features and an error report |
 | `detector.py`, `detect.py`, `lab.py` | 330 | The three structural rules, offline screening, synthetic rule cases |
 | `storage.py` | 56 | Never-overwrite run folders, atomic summaries |
-| `kafka_pipeline.py`, `kafka_workers.py` | 571 | Topics, publisher, replay, archive consumer, enrichment consumer (batched checkpoints) |
-| `stream_lake.py` | 216 | Enriched topic to lake tables in offset-named micro-batches, through the quality gate (`kafka-lake`) |
+| `kafka_pipeline.py`, `kafka_workers.py` | 606 | Topics, publisher, replay, archive consumer, enrichment consumer (batched checkpoints) |
+| `stream_lake.py` | 263 | Enriched topic to lake tables in offset-named micro-batches, through the quality gate, with bounded duplicate memory (`kafka-lake`) |
 | `lake_compact.py` | 80 | Merge the streamed lake's small files, one per closed hour (`lake-compact`) |
 | `metrics.py` | 98 | Prometheus metrics for the stream sink and the enrichment worker: lag, freshness, throughput, quarantines, requests |
 | `enrichment.py`, `parquet_archive.py` | 370 | Rate-limited REST enrichment; Kafka-to-Parquet archive |
@@ -142,7 +143,7 @@ Python package `src/blockpulse/` (about 6,200 lines, flat on purpose):
 | `drills.py` | 201 | Failure drills: worker crash, broker restart, Postgres crash (`drill`) |
 | `k8s_drills.py` | 316 | The same drills as pod kills in a k3d cluster (`drill k8s-*`) |
 | `synth.py` | 66 | Deterministic synthetic capture sessions for drills (`synth-capture`) |
-| `cli.py` | 614 | Command-line entry point |
+| `cli.py` | 628 | Command-line entry point |
 
 Elsewhere:
 

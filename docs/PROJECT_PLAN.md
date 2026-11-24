@@ -1,6 +1,6 @@
 # BlockPulse: plan and status
 
-Last updated 2026-11-24. This page says what the project is for, where it stands, what could come next, and which decisions shaped it. How the system works is in [ARCHITECTURE.md](ARCHITECTURE.md); how to run each part is in the [guides](guides/); the dated evidence is in [experiments](experiments/); the step-by-step history is in [archive/milestone-history.md](archive/milestone-history.md).
+Last updated 2026-11-24, when the project was closed. This page says what the project is for, where it stands, what could come next, and which decisions shaped it. How the system works is in [ARCHITECTURE.md](ARCHITECTURE.md); how to run each part is in the [guides](guides/); the dated evidence is in [experiments](experiments/); the step-by-step history is in [archive/milestone-history.md](archive/milestone-history.md).
 
 ## 1. Purpose
 
@@ -16,7 +16,7 @@ What the project will not claim:
 
 ## 2. Status
 
-**The project is complete.** The roadmap (milestones M0–M3 and steps DE1–DE7) is built, and the dataset is final: the 89-hour AWS collection plus the earlier laptop sessions, 2.65 million transactions. No further collection will be run (decision D32), so every conclusion stands on that data.
+**The project is complete and closed as of 2026-11-24.** The roadmap (milestones M0–M3 and steps DE1–DE7) is built, and the dataset is final: the 89-hour AWS collection plus the earlier laptop sessions, 2.65 million transactions. No further collection will be run (decision D32), so every conclusion stands on that data.
 
 | Area | State | Guide |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ What the project will not claim:
 | Unattended collection, AWS collector | Done; the AWS stack is torn down | [07](guides/07-collection.md), [08](guides/08-aws.md) |
 | Load tests and failure drills | Done | [09](guides/09-load-test.md), [10](guides/10-failure-drills.md) |
 | dbt models and tests; the hourly mart refreshable by day | Done | [11](guides/11-dbt.md) |
-| Streaming into the lake, metrics, alerts, compaction, serving from the streamed lake | Done; the streamed lake, compaction and stream serving match the batch path row for row on recorded traffic ([report](experiments/2026-11-24-live-capture-and-stream-path.md)) | [12](guides/12-streaming-lake-and-metrics.md) |
+| Streaming into the lake, metrics and alerts for the sink and the worker, compaction, serving from the streamed lake | Done; the streamed lake, compaction and stream serving match the batch path row for row on recorded traffic ([report](experiments/2026-11-24-live-capture-and-stream-path.md)) | [12](guides/12-streaming-lake-and-metrics.md) |
 | Airflow orchestration | Done | [13](guides/13-airflow.md) |
 | Kubernetes: cluster, Helm chart for the whole streaming and serving path, scheduled lake upkeep, pod-kill drills | Done on generated traffic, in a cloud session and in CI | [14](guides/14-kubernetes.md) |
 
@@ -36,7 +36,7 @@ Checks on 2026-11-24 (Linux, Python 3.12): 196 tests passed and 1 skipped; ruff,
 
 ## 3. What is left
 
-Nothing. Every milestone, roadmap step and open check is done.
+Nothing. Every milestone, roadmap step and open check is done, and a closing design review fixed what could be fixed in place ([review](experiments/2026-11-24-design-review.md)).
 
 One thing has never been run and is not required: the Kubernetes scripts on Windows with Docker Desktop. They pass on Linux in CI on every push and in a cloud session, which is what the project claims. Running them on the laptop would only confirm that the laptop's own Docker and Git Bash setup works.
 
@@ -84,6 +84,7 @@ Closed, not to be done: a longer AWS collection (D32); managed Kafka (MSK), EKS 
 | D27 | Airflow orchestrates the CLI; it doesn't contain pipeline logic. BlockPulse runs from its own venv in the Airflow image, metadata is SQLite, the unit of work is one UTC day of capture starts (`process-pending --date`), and a one-slot pool guards the data root | 2026-10-20: one implementation for every runner (D15); Airflow's dependencies never mix with the lock; a pool also covers backfill runs, which `max_active_runs` doesn't |
 | D28 | A processing lock is stale when its process is gone (same host) or it is 3 h old, and SIGTERM exits through cleanup | 2026-10-20: a task killed by Airflow after the laptop slept left its lock and blocked every retry |
 | D29 | Kafka on Kubernetes is a plain StatefulSet running the same `apache/kafka` image as Compose, not Strimzi or Redpanda | 2026-11-24: the drills must compare like with like (same broker, same version); an operator adds custom resources and about 0.5 GB without changing what the drills prove. Revisit if the goal becomes learning operators |
+| D33 | After completion, design weaknesses are fixed only where that can be done in place; anything needing a rebuild is recorded and left | 2026-11-24: a review fixed two (unbounded sink memory, an unmonitored worker) and listed five it left, with reasons ([review](experiments/2026-11-24-design-review.md)) |
 | D32 | The dataset is final: no further AWS collection. The project is completed on the 2.65 million transactions already collected | 2026-11-24, owner's decision. The model comparison therefore stays as measured (rules champion, gate failed 2 of 4); its stability can still be checked across seeds on the same data |
 | D31 | Drills that can't use recorded sessions run on generated captures labelled synthetic (`synth-capture`), and reports say so | 2026-11-24: recorded data is local evidence outside the repository; a deterministic generator also lets drills run anywhere, CI included. Counts from synthetic and recorded runs are never compared |
 | D30 | DE7 is developed in an ephemeral cloud session on generated or fixture data; every step is pushed | 2026-11-24: the session has the same memory as the laptop with nothing competing for it; the recorded dataset stays on the laptop, so DE7 numbers are labelled with their data |
