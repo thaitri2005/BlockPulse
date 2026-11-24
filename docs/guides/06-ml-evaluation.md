@@ -27,7 +27,7 @@ What it does **not** support: any accuracy, precision, recall or false-positive 
 
 Evidence: [first evaluation](../experiments/2026-10-14-m3-first-evaluation.md), [synthetic sweep](../experiments/2026-10-14-m3-synthetic-sweep.md), [rerun on AWS data](../experiments/2026-10-19-m3-rerun-aws-data.md).
 
-![The model against the promotion gate](../images/model-vs-gate.png)
+<img src="../images/model-vs-gate.png" alt="The model against the promotion gate" width="620">
 
 ## Run the whole chain
 

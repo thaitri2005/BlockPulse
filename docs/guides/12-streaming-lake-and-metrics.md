@@ -32,17 +32,15 @@ The order of operations is what makes a crash harmless. Offsets are committed on
 
 ```mermaid
 sequenceDiagram
-    participant K as Kafka (enriched topic)
-    participant S as Stream sink
-    participant L as Lake files
+    participant K as Kafka
+    participant S as Sink
+    participant L as Lake
     K->>S: messages from offset 500
-    S->>L: delete any files that start in this offset range
-    S->>L: write stream-p0-o500.parquet and its quality report
+    S->>L: write stream-p0-o500.parquet
     S->>K: commit offset 525
-    Note over S: crash here, before the next commit
+    Note over S: crash before the next commit
     K->>S: messages from offset 525 again
-    S->>L: delete stream-p0-o525.parquet if it exists, then write it again
-    S->>K: commit offset 550
+    S->>L: replace stream-p0-o525.parquet
 ```
 
 ## Metrics (`metrics.py`)
@@ -58,7 +56,7 @@ The only label is the table name. Transaction ids or error strings never become 
 
 Prometheus (`observability/prometheus/prometheus.yml`) scrapes `host.docker.internal:9108` every 5 s, because the sink runs on the host and Prometheus runs in Compose. The Grafana dashboard **BlockPulse pipeline health** shows whether the sink is up, lag, freshness, quarantined rows, throughput, rows per second by table, and batch-flush time (p50/p95).
 
-![The pipeline dashboard after a replay of two live captures, 2026-11-24](../images/grafana-pipeline.png)
+<img src="../images/grafana-pipeline.png" alt="The pipeline dashboard after a replay of two live captures, 2026-11-24" width="620">
 
 *The pipeline dashboard in the Kubernetes deployment after two live captures were replayed. Newest event age is red because the replay happened about half an hour after the capture.*
 
@@ -73,7 +71,7 @@ Prometheus (`observability/prometheus/prometheus.yml`) scrapes `host.docker.inte
 
 The `for` clause is what keeps an alert from paging on a blip. A rule whose condition is true sits in *pending* and only *fires* if the condition stays true for the whole window. `promtool check rules` validates the file.
 
-![Prometheus alert rules: three inactive, DataStale pending](../images/prometheus-alerts.png)
+<img src="../images/prometheus-alerts.png" alt="Prometheus alert rules: three inactive, DataStale pending" width="460">
 
 *The four rules in Prometheus during that replay. `DataStale` is pending, not firing: the condition is true but has not yet held for the rule's `for` window.*
 
