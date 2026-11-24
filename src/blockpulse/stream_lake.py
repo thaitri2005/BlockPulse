@@ -20,6 +20,11 @@ are not in Kafka, so the stream writes `transactions` and `lifecycle_events` onl
 Known limit: within one capture run, a transaction's first observation wins. That state is held in memory, so after a
 restart a transaction re-announced later in the same run could get a second row; `fct_transactions` in dbt keeps the
 first observation either way.
+
+The state is bounded, because the sink runs for days: it remembers the most recent `SEEN_MESSAGES` message ids and
+the transaction ids of the `SEEN_RUNS` most recently active capture runs, and forgets the oldest beyond that.
+Redelivery after a crash or a group change only replays recent offsets, well inside that window. A duplicate older
+than the window would be written again, with the same first-observation safety net in dbt.
 """
 
 import json
@@ -33,6 +38,48 @@ from blockpulse.lake import TABLES, _partition, _write_parquet, validate
 from blockpulse.storage import utc_now
 
 STREAM_TABLES = ("transactions", "lifecycle_events")
+SEEN_MESSAGES = 200_000  # about two days of hourly sessions at recorded message rates
+SEEN_RUNS = 8
+
+
+class RecentSet:
+    """A set that remembers only the most recently added `limit` items."""
+
+    def __init__(self, limit: int):
+        self.limit, self._items = limit, {}
+
+    def __contains__(self, item) -> bool:
+        return item in self._items
+
+    def __len__(self) -> int:
+        return len(self._items)
+
+    def add(self, item) -> None:
+        self._items.pop(item, None)
+        self._items[item] = None          # dicts keep insertion order, so the first key is the oldest
+        while len(self._items) > self.limit:
+            del self._items[next(iter(self._items))]
+
+
+class RecentRuns:
+    """Transaction ids per capture run, kept for the `limit` most recently active runs only."""
+
+    def __init__(self, limit: int):
+        self.limit, self._runs = limit, {}
+
+    def __len__(self) -> int:
+        return len(self._runs)
+
+    def setdefault(self, run, default) -> set:
+        seen = self._runs.pop(run, default)
+        self._runs[run] = seen            # most recently active run last
+        while len(self._runs) > self.limit:
+            del self._runs[next(iter(self._runs))]
+        return seen
+
+
+def new_state() -> dict:
+    return {"messages": RecentSet(SEEN_MESSAGES), "txids_by_run": RecentRuns(SEEN_RUNS)}
 
 
 def _batch_name(partition: int, first_offset: int) -> str:
@@ -144,7 +191,7 @@ def stream_to_lake(lake: Path, group_id: str, bootstrap_servers: str, *, consume
         "session.timeout.ms": 10000, "heartbeat.interval.ms": 3000,
     })
     consumer.subscribe([ENRICHED_TOPIC])
-    state = {"messages": set(), "txids_by_run": {}}
+    state = new_state()
     batches = {}  # partition -> {"first": offset, "last_message": message, "rows": {table: [...]}, "count": n}
     totals = defaultdict(int)
     started, last_flush, idle_since = time.monotonic(), time.monotonic(), None

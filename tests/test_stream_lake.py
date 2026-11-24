@@ -137,3 +137,24 @@ def test_a_replay_with_different_batch_boundaries_leaves_no_stale_rows(layout, t
     assert summary["stale_files_removed"] > 0
     names = {p.name for p in (stream_lake / "lifecycle_events").rglob("*.parquet")}
     assert all(name.startswith("stream-p") and "-o000000000000." in name for name in names)  # one batch per partition
+
+
+def test_sink_memory_is_bounded_and_still_catches_recent_duplicates():
+    from blockpulse.stream_lake import RecentRuns, RecentSet, new_state, rows_from_enriched
+    seen = RecentSet(3)
+    for item in ("a", "b", "c", "a", "d"):   # re-adding "a" makes it recent again, so "b" is the oldest
+        seen.add(item)
+    assert len(seen) == 3 and "b" not in seen and all(x in seen for x in ("a", "c", "d"))
+
+    runs = RecentRuns(2)
+    first = runs.setdefault("run-1", set())
+    first.add("tx")
+    runs.setdefault("run-2", set())
+    assert runs.setdefault("run-1", set()) is first     # still remembered, and now the most recent
+    runs.setdefault("run-3", set())                     # pushes out run-2, the least recently active
+    assert len(runs) == 2 and runs.setdefault("run-1", set()) == {"tx"} and runs.setdefault("run-2", set()) == set()
+
+    state = new_state()
+    record = {"message_id": "m1", "run_id": "r", "events": []}
+    assert rows_from_enriched(record, state)[2]["duplicate_message"] == 0
+    assert rows_from_enriched(record, state)[2]["duplicate_message"] == 1   # a redelivery is still recognised
