@@ -139,7 +139,7 @@ Measured on recorded mempool traffic unless stated. Each row links to the guide 
 | Can the feed be collected unattended? | 89 hours on one AWS instance, 0 failures, 2.65 million transactions, about $0.80, then torn down ([08](docs/guides/08-aws.md)) |
 | Is the data clean? | 8.5 million rows across 94 sessions passed the lake contract; 0 quarantined ([05](docs/guides/05-lake-and-athena.md)) |
 | Is processing reproducible? | Replays are byte-identical; two recorded evaluation runs rebuild exactly ([06](docs/guides/06-ml-evaluation.md)) |
-| Do the streaming and batch paths agree? | 13,707 messages streamed into the lake matched the batch lake row for row ([12](docs/guides/12-streaming-lake-and-metrics.md)) |
+| Do the streaming and batch paths agree? | 13,707 messages streamed into the lake matched the batch lake row for row; so did a compacted streamed lake, and Postgres rebuilt from it, on two live captures ([12](docs/guides/12-streaming-lake-and-metrics.md)) |
 | Does a backfill equal a direct run? | A 3-day Airflow backfill matched with 0 differing rows in the lake, the dbt marts and Postgres ([13](docs/guides/13-airflow.md)) |
 | How fast is it? | A day of traffic in 5.8 minutes in batch; streaming p50 latency 0.16 s after fixing a commit bottleneck ([09](docs/guides/09-load-test.md)) |
 | How fast can serving be rebuilt? | 2.65 million transactions in 10.6 minutes; bulk loads 30 to 52 times faster than row by row, with identical contents ([04](docs/guides/04-postgres-api-dashboard.md)) |
@@ -153,7 +153,7 @@ The last row is a result, not a failure: the evaluation exists to decide honestl
 ## Limits
 
 - One Kafka broker, one Postgres, one node: the drills test correctness after a crash, not high availability.
-- The streaming path writes features and rule flags to its own lake. Postgres can be rebuilt from it, but there is no continuous load, so serving is as fresh as the last rebuild.
+- The streaming path writes to its own lake. Postgres is rebuilt from it on demand or on a schedule, not loaded continuously, so serving is as fresh as the last rebuild.
 - One public provider's view of the mempool, with recorded gaps.
 - No labels, so no accuracy.
 - The dataset is final: 89 hours from AWS plus earlier sessions, 2.65 million transactions. No further collection is planned, so the model comparison stands as measured.

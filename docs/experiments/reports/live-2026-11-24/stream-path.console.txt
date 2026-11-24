@@ -1,0 +1,67 @@
+## kafka-replay
+  "messages_published": 446,
+  "elapsed_seconds": 0.622,
+## kafka-enrich (REST fallback unreachable)
+  "output_topic": "blockpulse.enriched.v1",
+  "messages_consumed": 503,
+  "transactions_enriched": 0,
+  "consumer_lag_messages": 0,
+## kafka-lake
+  "messages": 503,
+  "transactions_written": 3344,
+  "transactions_quarantined": 0,
+  "lifecycle_events_written": 10392,
+  "lifecycle_events_quarantined": 0,
+  "batches": 2,
+  "consumer_lag_messages": 0,
+## files before compaction
+      2 lifecycle_events/dt=2026-11-24/hour=12
+      2 lifecycle_events/dt=2026-11-24/hour=13
+      2 transactions/dt=2026-11-24/hour=12
+      2 transactions/dt=2026-11-24/hour=13
+## kafka-lake again with 25-message batches (small files, as live traffic makes)
+  "messages": 503,
+  "transactions_written": 3344,
+  "transactions_quarantined": 0,
+  "lifecycle_events_written": 10392,
+  "lifecycle_events_quarantined": 0,
+  "batches": 22,
+## batch lake vs streamed lake
+transactions: rows 3344 vs 3344; only in first 0; only in second 0; files 4 vs 24
+lifecycle_events: rows 10392 vs 10392; only in first 0; only in second 0; files 4 vs 24
+## lake-compact (closed hours only)
+{"transactions": {"partitions": 2, "partitions_compacted": 1, "partitions_skipped_open": 1, "files_before": 5, "files_after": 1, "rows": 301, "duplicate_rows_dropped": 0}, "lifecycle_events": {"partitions": 2, "partitions_compacted": 1, "partitions_skipped_open": 1, "files_before": 5, "files_after": 1, "rows": 318, "duplicate_rows_dropped": 0}}
+## streamed lake before vs after compaction
+transactions: rows 3344 vs 3344; only in first 0; only in second 0; files 24 vs 20
+lifecycle_events: rows 10392 vs 10392; only in first 0; only in second 0; files 24 vs 20
+## lake-compact again
+{'transactions': 0, 'lifecycle_events': 0}
+## batch lake vs compacted streamed lake
+transactions: rows 3344 vs 3344; only in first 0; only in second 0; files 4 vs 20
+lifecycle_events: rows 10392 vs 10392; only in first 0; only in second 0; files 4 vs 20
+## db-init
+2
+## serving-rebuild from the batch lake
+{"source_lake":"<scratch>/live/root/lake","scores":3344,"lifecycle_events":10392,"fallback_sessions":[],"transactions":8076,"flagged":106,"seconds":{"copy_scores":0.1,"copy_events":0.1,"build_transactions":0.1,"build_indexes":0.1,"swap":0.0,"total":0.7}}
+
+flagged|106|
+lifecycle_events|10392|609ce83b1e2c7a0fa69fb598c085c7e5
+scores|3344|5addd107e09843c9173a7cbe2e8a8896
+status:confirmed|6950|
+status:observed_unconfirmed|1083|
+status:removed_unknown_reason|5|
+status:superseded|38|
+transactions|8076|9e099ae33cb890705b6a7ebb2ae55256
+## serving-rebuild --lake (compacted streamed lake)
+{"source_lake":"<scratch>/live/root/lake-stream-small","scores":3344,"lifecycle_events":10392,"fallback_sessions":[],"transactions":8076,"flagged":106,"seconds":{"copy_scores":0.1,"copy_events":0.1,"build_transactions":0.1,"build_indexes":0.1,"swap":0.0,"total":0.7}}
+
+flagged|106|
+lifecycle_events|10392|609ce83b1e2c7a0fa69fb598c085c7e5
+scores|3344|5addd107e09843c9173a7cbe2e8a8896
+status:confirmed|6950|
+status:observed_unconfirmed|1083|
+status:removed_unknown_reason|5|
+status:superseded|38|
+transactions|8076|9e099ae33cb890705b6a7ebb2ae55256
+## identical tables (counts and checksums)?
+yes: identical

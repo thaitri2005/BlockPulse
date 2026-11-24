@@ -59,4 +59,4 @@ Processing the JSONL archive produced the same 2,732 feature records and 6,983 e
 
 The full automated suite passes: 62 passed, one optional loopback WebSocket test skipped. A synthetic WebSocket source was also captured to a temporary Kafka topic through the real local broker and received one acknowledged message. The execution environment denied public WebSocket access with WinError 5, so a live public-source smoke test remains to run from the user's PowerShell session. The bounded REST fallback is covered with mocked response, rate-limit, request-budget, and failure tests.
 
-M1 is complete for the local replayable pipeline. A public live-source smoke test is an environment check, not a reason to skip the saved-data replay path.
+M1 is complete for the local replayable pipeline. The live-source check was run on 2026-11-24: a 60-second `capture-kafka` against the public feed saved 57 messages and the broker acknowledged all 57 ([report](../experiments/2026-11-24-live-capture-and-stream-path.md)).

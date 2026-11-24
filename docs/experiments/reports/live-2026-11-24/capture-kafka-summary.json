@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "run_id": "5dea1dcfbbfe4c00b8ec0777c11631bc",
+  "source_mode": "ws",
+  "started_at": "2026-11-24T12:59:29.232+00:00",
+  "config": {
+    "url": "wss://node203.sv1.mempool.space/api/v1/ws",
+    "subscription": "track-mempool",
+    "duration": 60.0,
+    "max_messages": 10000,
+    "max_bytes": 52428800,
+    "max_message_bytes": 4194304,
+    "max_reconnects": 3,
+    "open_timeout": 15
+  },
+  "connection_attempts": 1,
+  "connections": 1,
+  "connection_errors": 0,
+  "messages_received": 57,
+  "messages_saved": 57,
+  "payload_bytes_saved": 749586,
+  "raw_file_bytes": 818096,
+  "messages_with_parse_issues": 0,
+  "unrecognized_messages": 1,
+  "sequence_discontinuities": 0,
+  "event_counts": {
+    "added": 243,
+    "removed": 4,
+    "mined": 0,
+    "replaced": 4
+  },
+  "gaps": [
+    {
+      "start": "2026-11-24T12:59:29.232+00:00",
+      "end": "2026-11-24T12:59:29.989+00:00",
+      "history_recovered": false
+    }
+  ],
+  "coverage_note": "Source observations only. Reconnects do not recover missed history.",
+  "ended_at": "2026-11-24T13:00:29.323+00:00",
+  "elapsed_seconds": 60.091,
+  "stop_reason": "duration",
+  "unique_transaction_ids": 247,
+  "messages_per_minute": 56.914,
+  "events_per_minute": 250.62,
+  "kafka_publish": {
+    "topic": "blockpulse.raw.v1",
+    "messages_queued": 57,
+    "messages_acknowledged": 57,
+    "elapsed_seconds": 60.093,
+    "messages_per_second": 0.949
+  }
+}

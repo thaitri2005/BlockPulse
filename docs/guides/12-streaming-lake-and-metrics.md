@@ -87,7 +87,7 @@ The sink writes one file per Kafka partition per micro-batch, so an hour of traf
 
 `serving-rebuild --lake data/lake-stream` rebuilds the Postgres serving tables from the stream sink's lake instead of the batch lake, so the API and Grafana show what was streamed ([04](04-postgres-api-dashboard.md#two-ways-data-gets-in)). The streamed lake is taken as the whole truth for that rebuild: the stream names a capture by its run id and the batch path by folder name, so mixing the two would count captures twice.
 
-Both are covered by tests on fixture data (`tests/test_lake_compact.py`, `tests/test_serving.py`): a compacted lake returns identical rows, and serving rebuilt from the streamed lake equals serving rebuilt from the batch lake apart from the run id. Neither has been timed on recorded traffic.
+Both are covered by tests (`tests/test_lake_compact.py`, `tests/test_serving.py`) and were checked on recorded traffic on 2026-11-24: for two live captures (503 messages, 3,344 scored transactions, 10,392 events) the streamed lake equalled the batch lake row for row before and after compaction, and Postgres rebuilt from the compacted streamed lake had the same row checksums as Postgres rebuilt from the batch lake ([report](../experiments/2026-11-24-live-capture-and-stream-path.md)). The runs are too small to time.
 
 ## Limits
 

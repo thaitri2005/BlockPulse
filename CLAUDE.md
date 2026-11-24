@@ -44,7 +44,7 @@ bash infra/aws/tests/run_container_tests.sh       # from the repo root: Amazon L
 .\.venv\Scripts\shellcheck.exe infra/aws/instance/*.sh infra/aws/tests/*.sh
 ```
 
-The live WebSocket needs `--url wss://node203.sv1.mempool.space/api/v1/ws`, because the default host times out from this network. The agent runtime may be blocked from public WebSockets entirely; ask the user to run live captures from their own shell.
+The live WebSocket needs `--url wss://node203.sv1.mempool.space/api/v1/ws`, because the default host times out from this network. Some agent runtimes are blocked from public WebSockets (a cloud session on 2026-11-24 was not); try a 15-second capture before asking the user to run one from their own shell.
 
 ## Dependencies
 

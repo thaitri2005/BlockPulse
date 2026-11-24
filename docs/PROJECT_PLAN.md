@@ -21,14 +21,14 @@ What the project will not claim:
 | Area | State | Guide |
 | --- | --- | --- |
 | Capture, processing, structural rules | Done | [01](guides/01-capture-and-process.md), [02](guides/02-structural-rules.md) |
-| Kafka ingest, enrichment, replay | Done. Open: a 60 s live `capture-kafka` smoke test from the owner's shell | [03](guides/03-kafka.md) |
+| Kafka ingest, enrichment, replay | Done, including a live `capture-kafka` into the broker ([report](experiments/2026-11-24-live-capture-and-stream-path.md)) | [03](guides/03-kafka.md) |
 | Postgres serving, API, Grafana | Done | [04](guides/04-postgres-api-dashboard.md) |
 | Lake, quality gate, DuckDB and Athena | Done | [05](guides/05-lake-and-athena.md) |
 | ML evaluation and detector registry | Done, and final: the rules remain champion | [06](guides/06-ml-evaluation.md) |
 | Unattended collection, AWS collector | Done; the AWS stack is torn down | [07](guides/07-collection.md), [08](guides/08-aws.md) |
 | Load tests and failure drills | Done | [09](guides/09-load-test.md), [10](guides/10-failure-drills.md) |
 | dbt models and tests; the hourly mart refreshable by day | Done | [11](guides/11-dbt.md) |
-| Streaming into the lake, metrics, alerts, compaction, serving from the streamed lake | Done; compaction and stream serving verified on fixtures and on generated traffic in the cluster | [12](guides/12-streaming-lake-and-metrics.md) |
+| Streaming into the lake, metrics, alerts, compaction, serving from the streamed lake | Done; the streamed lake, compaction and stream serving match the batch path row for row on recorded traffic ([report](experiments/2026-11-24-live-capture-and-stream-path.md)) | [12](guides/12-streaming-lake-and-metrics.md) |
 | Airflow orchestration | Done | [13](guides/13-airflow.md) |
 | Kubernetes: cluster, Helm chart for the whole streaming and serving path, scheduled lake upkeep, pod-kill drills | Done on generated traffic, in a cloud session and in CI | [14](guides/14-kubernetes.md) |
 
@@ -36,15 +36,9 @@ Checks on 2026-11-24 (Linux, Python 3.12): 192 tests passed and 1 skipped; ruff,
 
 ## 3. What is left
 
-Nothing is required. Three confirmations need the owner's machine, and a few extensions are possible on the existing data.
+Nothing. Every milestone, roadmap step and open check is done.
 
-**Confirmations on the laptop (each a few minutes):**
-
-| Item | Why it is open |
-| --- | --- |
-| Kubernetes quick start and one drill on Windows with Docker Desktop | They pass on Linux (CI and a cloud session) only |
-| `lake-compact` and `serving-rebuild --lake` on a recorded stream replay | Verified on fixtures and generated traffic only |
-| A 60 s live `capture-kafka` | Agent sessions cannot open the public WebSocket |
+One thing has never been run and is not required: the Kubernetes scripts on Windows with Docker Desktop. They pass on Linux in CI on every push and in a cloud session, which is what the project claims. Running them on the laptop would only confirm that the laptop's own Docker and Git Bash setup works.
 
 **Possible extensions, all on the existing dataset:**
 
@@ -58,7 +52,7 @@ Nothing is required. Three confirmations need the owner's machine, and a few ext
 
 Closed, not to be done: a longer AWS collection (D32); managed Kafka (MSK), EKS and RDS, each of which costs more per month than the whole project; entity analysis over address groups, which would need more coverage than this dataset has.
 
-**Where work runs.** Jobs measured in minutes run on the laptop or in a cloud development session. Nothing in the remaining list needs AWS.
+**Where work runs.** Jobs measured in minutes run on the laptop or in a cloud development session. Nothing in the list of extensions needs AWS.
 
 ## 4. Decisions
 
