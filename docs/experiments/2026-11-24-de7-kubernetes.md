@@ -85,8 +85,4 @@ The 1.4 GiB total is well under the 3–4 GB estimated before starting; the esti
 
 Tests after DE7c: `tests/test_helm_chart.py` has 11 tests; full suite 166 passed, 1 skipped; `helm lint --strict`, ruff and shellcheck clean.
 
-Not verified: the CI run. The shellcheck step now includes `infra/k8s/*.sh`, and the chart tests run in the Python job if the runner has `helm` (GitHub's Ubuntu images normally do), but nothing could be pushed (see below). Also not done: a build of the image without the proxy settings, which is the path the laptop will take.
-
-## Open issue: pushes are refused
-
-`git push` to `thaitri2005/BlockPulse` returns 403 ("Claude doesn't have GitHub access"). The commits exist only in the session until the owner installs the Claude GitHub App on the repository or reconnects GitHub. Remove this section once a push succeeds.
+Not verified: the CI run. The shellcheck step now includes `infra/k8s/*.sh`, and the chart tests run in the Python job if the runner has `helm` (GitHub's Ubuntu images normally do), and CI runs only on `main` and on pull requests, so the branch push did not trigger it. Also not done: a build of the image without the proxy settings, which is the path the laptop will take.
