@@ -14,6 +14,8 @@ Each process uses its own registry, so tests can create several instances.
 import time
 from datetime import datetime
 
+LAG_INTERVAL_SECONDS = 5.0  # how often the enrichment worker asks the broker for its lag
+
 
 class StreamLakeMetrics:
     def __init__(self, port: int | None = None, *, registry=None):
@@ -83,6 +85,7 @@ class EnrichmentMetrics:
                                 registry=self.registry)
         self.errors = Counter("blockpulse_enrichment_errors_total", "Records sent to the errors topic", registry=self.registry)
         self.lag = Gauge("blockpulse_consumer_lag_messages", "Messages behind the end of the raw topic", registry=self.registry)
+        self._lag_measured = None
         if port:
             start_http_server(port, registry=self.registry)
 
@@ -91,7 +94,17 @@ class EnrichmentMetrics:
         self.requests.inc(requests)
         self.errors.inc(errors)
 
-    def checkpointed(self, consumer) -> None:
+    def checkpointed(self, consumer, *, every: float = LAG_INTERVAL_SECONDS) -> None:
+        """Refresh the lag gauge, at most once per `every` seconds.
+
+        Measuring lag asks the broker for each partition's end offset. Under load the worker checkpoints about ten
+        times a second, and doing that query every time cut its throughput so far that a 30,000-message drill no
+        longer finished in ten minutes. Prometheus scrapes every 5 seconds, so fresher values would not be seen.
+        """
+        now = time.monotonic()
+        if self._lag_measured is not None and now - self._lag_measured < every:
+            return
+        self._lag_measured = now
         from blockpulse.kafka_workers import _consumer_lag
         lag = _consumer_lag(consumer)
         if lag is not None:

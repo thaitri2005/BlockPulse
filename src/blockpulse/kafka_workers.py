@@ -195,6 +195,8 @@ def enrich_topic(
         checkpoint()  # normal exit: everything processed is flushed, acknowledged, then committed
     finally:
         final_lag = _consumer_lag(consumer)
+        if metrics and final_lag is not None:
+            metrics.lag.set(final_lag)  # the throttled gauge may be a few seconds old; leave the true last value
         consumer.close()
         producer.flush(30)
     elapsed = max(time.monotonic() - started, 0.001)

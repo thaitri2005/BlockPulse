@@ -148,7 +148,7 @@ Elsewhere:
 
 | Path | What it is |
 | --- | --- |
-| `tests/` | pytest (196 tests); Postgres tests opt in with `BLOCKPULSE_TEST_DSN`; Helm chart tests need `helm`; the Kubernetes drill logic is tested with `kubectl` faked |
+| `tests/` | pytest (197 tests); Postgres tests opt in with `BLOCKPULSE_TEST_DSN`; Helm chart tests need `helm`; the Kubernetes drill logic is tested with `kubectl` faked |
 | `analytics/queries/` | Shared SQL, run by DuckDB locally and saved as Athena named queries |
 | `analytics/dbt/` | dbt project: staging, intermediate and mart models with tests, over the lake |
 | `orchestration/airflow/` | Airflow image (BlockPulse in its own venv) and the `blockpulse_daily` DAG |

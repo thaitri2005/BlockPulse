@@ -200,3 +200,19 @@ def test_worker_reports_messages_and_lag_to_metrics():
     assert value("blockpulse_enrichment_errors_total") == 0
     # The same metric name the sink uses, so one lag alert covers both consumers.
     assert value("blockpulse_consumer_lag_messages") is not None
+
+
+def test_lag_is_measured_at_most_once_per_interval(monkeypatch):
+    """The lag query goes to the broker; doing it at every checkpoint made the worker too slow to finish a drill."""
+    pytest = __import__("pytest")
+    pytest.importorskip("prometheus_client")
+    from blockpulse import kafka_workers
+    from blockpulse.metrics import EnrichmentMetrics
+    calls = []
+    monkeypatch.setattr(kafka_workers, "_consumer_lag", lambda consumer: calls.append(1) or 7)
+    metrics = EnrichmentMetrics()
+    for _ in range(50):
+        metrics.checkpointed(object())            # fifty checkpoints in a row: one broker query
+    assert len(calls) == 1 and metrics.registry.get_sample_value("blockpulse_consumer_lag_messages") == 7
+    metrics.checkpointed(object(), every=0)       # once the interval has passed it is measured again
+    assert len(calls) == 2

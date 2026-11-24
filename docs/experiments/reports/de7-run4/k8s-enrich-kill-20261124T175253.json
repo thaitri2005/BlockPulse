@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "drill": "k8s-enrich-kill",
+  "created_at": "2026-11-24T17:52:53.183+00:00",
+  "passed": true,
+  "seconds": 200.5,
+  "checks": [
+    {
+      "check": "the kill lands mid-stream: some offsets committed, some messages still unprocessed",
+      "passed": true,
+      "detail": {
+        "worker_pod": "bp-worker-5fb465d498-jw82p",
+        "at_kill": {
+          "partitions": 3,
+          "committed": 9500,
+          "end": 30000,
+          "lag": 20500
+        }
+      }
+    },
+    {
+      "check": "the Deployment replaced the killed pod without anyone restarting it",
+      "passed": true,
+      "detail": {
+        "killed": "bp-worker-5fb465d498-jw82p",
+        "replacement": "bp-worker-5fb465d498-9lkpx",
+        "seconds": 3.4
+      }
+    },
+    {
+      "check": "the replacement resumed from the committed offsets and finished: lag 0",
+      "passed": true,
+      "detail": {
+        "final": {
+          "partitions": 3,
+          "committed": 30000,
+          "end": 30000,
+          "lag": 0
+        },
+        "seconds_from_kill": 15.1
+      }
+    },
+    {
+      "check": "every published message is in the raw topic",
+      "passed": true,
+      "detail": {
+        "published": 30000,
+        "raw_unique": 30000
+      }
+    },
+    {
+      "check": "no message lost: every raw message has an enriched record",
+      "passed": true,
+      "detail": {
+        "missing": 0
+      }
+    },
+    {
+      "check": "duplicates are bounded (replayed since the last checkpoint only)",
+      "passed": true,
+      "detail": {
+        "enriched_records": 30012,
+        "duplicate_records": 12
+      }
+    },
+    {
+      "check": "idempotent sink: the Parquet archive holds each message exactly once",
+      "passed": true,
+      "detail": {
+        "parquet_files": 30000,
+        "unique_messages": 30000,
+        "records_read": 30012
+      }
+    }
+  ],
+  "published": 30000,
+  "sessions": 3,
+  "data": "synthetic",
+  "install_seconds": 19.8,
+  "committed_at_kill": 9500,
+  "replacement_running_after_seconds": 3.4,
+  "raw_records": 30000,
+  "enriched_records": 30012,
+  "duplicate_records": 12
+}
