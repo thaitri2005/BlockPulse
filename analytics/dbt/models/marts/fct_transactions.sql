@@ -1,7 +1,10 @@
 -- One row per transaction: its first screened observation, plus its lifecycle. A flag is a structural rule
 -- match, not evidence of wrongdoing.
 with first_observation as (
-    select *
+    select
+        txid, session, received_at, dt, hour, n_in, n_out, value_out_sat, fee_sat, vsize, fee_rate_sat_vb,
+        max_equal_output_count, round_amount_fraction, rbf_signaled, is_flagged, signal_count, rule_ids,
+        feature_set_version, ruleset_version
     from {{ ref('stg_transactions') }}
     qualify row_number() over (partition by txid order by received_at, session) = 1
 ),

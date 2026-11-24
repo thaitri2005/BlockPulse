@@ -5,17 +5,17 @@ models:
     description: Screened transactions from the lake, one per session.
     columns:
       - name: txid
-        tests: [not_null]
+        data_tests: [not_null]
       - name: session
-        tests: [not_null]
+        data_tests: [not_null]
       - name: is_flagged
-        tests: [not_null]
+        data_tests: [not_null]
       - name: ruleset_version
-        tests:
+        data_tests:
           - accepted_values:
               arguments: {values: ['structural-rules-v1']}
       - name: feature_set_version
-        tests:
+        data_tests:
           - accepted_values:
               arguments: {values: ['transaction-v2']}
 
@@ -23,11 +23,11 @@ models:
     description: Lifecycle observations from the lake.
     columns:
       - name: event_id
-        tests: [unique, not_null]
+        data_tests: [unique, not_null]
       - name: txid
-        tests: [not_null]
+        data_tests: [not_null]
       - name: event_type
-        tests:
+        data_tests:
           - accepted_values:
               arguments: {values: ['added', 'removed', 'mined', 'replaced']}
 
@@ -35,4 +35,4 @@ models:
     description: Capture sessions and their coverage.
     columns:
       - name: session
-        tests: [unique, not_null]
+        data_tests: [unique, not_null]

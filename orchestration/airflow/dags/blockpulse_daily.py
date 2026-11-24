@@ -43,6 +43,7 @@ with DAG(
     max_active_runs=1,  # for scheduled runs; the pool below also covers backfills (process-pending holds a lock too)
     dagrun_timeout=timedelta(hours=3),
     default_args={
+        "owner": "blockpulse",  # shown in the UI and attached to alerts, so a failed task has a name on it
         "retries": 2,
         "retry_delay": timedelta(minutes=1),
         "retry_exponential_backoff": True,
